@@ -66,7 +66,7 @@ def int_to_hex_string(val):
 
 class USBIPHeader(BaseStucture):
     _fields_ = [
-        ('version', 'H', 262),
+        ('version', 'H', 273), ## 262 for signed version
         ('command', 'H'),
         ('status', 'I')
     ]
