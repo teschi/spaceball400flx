@@ -132,18 +132,19 @@ class USBHID(USBDevice):
         return return_val
 
     def handle_data(self, usb_req):
-#        return_val = struct.pack("<Bhhh", 1,randint(-500,500),randint(-500,500),randint(-500,500))
-#        print(len(return_val))
-#        self.send_usb_req(usb_req, return_val)
-#        return_val = struct.pack("<Bhhh", 2,randint(-500,500),randint(-500,500),randint(-500,500))
-#        print(len(return_val))
-#        self.send_usb_req(usb_req, return_val)
-#        sleep(0.05)
-        return_val = struct.pack("<BBBB", randint(0,255), 3, 3, 3)
-        print(return_val)
-        print(len(return_val))
-        self.send_usb_req(usb_req, return_val)
-        sleep(0.5)
+        if randint(0,1)==0:
+            return_val = struct.pack("<Bhhh", 1,randint(-500,500),randint(-500,500),randint(-500,500))
+            print(len(return_val))
+            self.send_usb_req(usb_req, return_val)
+            return_val = struct.pack("<Bhhh", 2,randint(-500,500),randint(-500,500),randint(-500,500))
+            print(len(return_val))
+            self.send_usb_req(usb_req, return_val)
+        else:
+            return_val = struct.pack("<BBBB", 3, randint(0,255), 3, 3)
+            print(return_val)
+            print(len(return_val))
+            self.send_usb_req(usb_req, return_val)
+            sleep(0.5)
 
 
     def handle_unknown_control(self, control_req, usb_req):
