@@ -4,7 +4,7 @@ import struct
 from time import sleep
 from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer
 
-joystick = True
+joystick = False
 
 # Emulating USB mouse
 
@@ -14,7 +14,6 @@ descriptor =         arr = [
           0x05, 0x01,           #  Usage Page (Generic Desktop)  
           0x09, 0x04 if joystick else 0x08,           #  0x08: Usage (Multi-Axis)  
           0xa1, 0x01,           #  Collection (Application)  
-          0x09, 0x01,		    #   Usage (Pointer)
           0xa1, 0x00,           # Collection (Physical)
           0x85, 0x01,           #  Report ID 
         #  0x16, 0x0c, 0xfe,        #logical minimum (-500)
@@ -105,16 +104,16 @@ configuration.interfaces = [interface_d]   # Supports only one interface
 
 class USBHID(USBDevice):
     vendorID = 0x1EAF if joystick else 0x46D
-    productID = 0xc644
-    bcdDevice = 0x0
-    bcdUSB = 0x0
+    productID = 0xc62b
+    bcdDevice = 0x200
+    bcdUSB = 0x200
     bNumConfigurations = 0x1
     bNumInterfaces = 0x1
     bConfigurationValue = 0x1
     configurations = []
     bDeviceClass = 0x0
     bDeviceSubClass = 0x0
-    bDeviceProtocol = 0x0
+    bDeviceProtocol = 0x01
     configurations = [configuration]  # Supports only one configuration
 
     def __init__(self):
@@ -134,15 +133,11 @@ class USBHID(USBDevice):
     def handle_data(self, usb_req):
         if randint(0,1)==0:
             return_val = struct.pack("<Bhhh", 1,randint(-500,500),randint(-500,500),randint(-500,500))
-            print(len(return_val))
             self.send_usb_req(usb_req, return_val)
             return_val = struct.pack("<Bhhh", 2,randint(-500,500),randint(-500,500),randint(-500,500))
-            print(len(return_val))
             self.send_usb_req(usb_req, return_val)
         else:
             return_val = struct.pack("<BBBB", 3, randint(0,255), 3, 3)
-            print(return_val)
-            print(len(return_val))
             self.send_usb_req(usb_req, return_val)
             sleep(0.5)
 

@@ -3,6 +3,9 @@ import socket
 import struct
 import types
 
+def rev(u):
+    return (((u>>8) | (u<<8)) &0xFFFF)
+
 class BaseStucture:
     def __init__(self, **kwargs):
         self.init_from_dict(**kwargs)
@@ -293,10 +296,10 @@ class USBDevice():
             self.send_usb_req(usb_req, DeviceDescriptor(bDeviceClass=self.bDeviceClass,
                                                         bDeviceSubClass=self.bDeviceSubClass,
                                                         bDeviceProtocol=self.bDeviceProtocol,
-                                                        bMaxPacketSize0=0x8,
-                                                        idVendor=self.vendorID,
-                                                        idProduct=self.productID,
-                                                        bcdDevice=self.bcdDevice,
+                                                        bMaxPacketSize0=0x40,
+                                                        idVendor=rev(self.vendorID),
+                                                        idProduct=rev(self.productID),
+                                                        bcdDevice=rev(self.bcdDevice),
                                                         iManufacturer=0,
                                                         iProduct=0,
                                                         iSerialNumber=0,
@@ -304,6 +307,8 @@ class USBDevice():
         elif control_req.wValue == 0x2: # configuration
             handled = True
             self.send_usb_req(usb_req, self.all_configurations[:control_req.wLength])
+        elif control_req.wValue == 0x3: # string
+            print("String request not supported")
 
         return handled
 
@@ -331,14 +336,15 @@ class USBContainer:
         self.usb_devices.append(usb_device)
 
     def handle_attach(self):
+        print("attach")
         return OPREPImport(base=USBIPHeader(command=3, status=0),
                            usbPath='/sys/devices/pci0000:00/0000:00:01.2/usb1/1-1',
                            busID='1-1',
                            busnum=1,
                            devnum=2,
                            speed=2,
-                           idVendor=self.usb_devices[0].vendorID,
-                           idProduct=self.usb_devices[0].productID,
+                           idVendor=(self.usb_devices[0].vendorID),
+                           idProduct=(self.usb_devices[0].productID),
                            bcdDevice=self.usb_devices[0].bcdDevice,
                            bDeviceClass=self.usb_devices[0].bDeviceClass,
                            bDeviceSubClass=self.usb_devices[0].bDeviceSubClass,
@@ -348,6 +354,7 @@ class USBContainer:
                            bNumInterfaces=self.usb_devices[0].bNumInterfaces)
 
     def handle_device_list(self):
+        print("list")
         usb_dev = self.usb_devices[0]
         return OPREPDevList(base=USBIPHeader(command=5,status=0),
                             nExportedDevice=1,
@@ -356,8 +363,8 @@ class USBContainer:
                             busnum=1,
                             devnum=2,
                             speed=2,
-                            idVendor=usb_dev.vendorID,
-                            idProduct=usb_dev.productID,
+                            idVendor=(usb_dev.vendorID),
+                            idProduct=(usb_dev.productID),
                             bcdDevice=usb_dev.bcdDevice,
                             bDeviceClass=usb_dev.bDeviceClass,
                             bDeviceSubClass=usb_dev.bDeviceSubClass,
