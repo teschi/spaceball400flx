@@ -18,8 +18,11 @@ lock = threading.Lock()
 xyz = [0,0,0]
 rxyz = [0,0,0]
 buttons = 0
-
+newButtons = False
+newXYZ = False
+newRXYZ = False
 trimValue = 100000
+event = threading.Event()
 
 def trim(x):
     if x&0x8000:
@@ -40,7 +43,6 @@ def persistentOpen():
                 print("Opened")
                 return c
             for p in serial.tools.list_ports.comports():
-                print(p.device)
                 if p.description.lower().startswith(description.lower()):
                     print("Opening "+str(p))
                     c = serial.Serial(port=p.device,baudrate=9600)
@@ -210,32 +212,33 @@ class USBHID(USBDevice):
 
     def generate_hid_report(self):
         usage = 0x04 if joystick else 0x08
-        
                 
         return_val = ''
         for val in descriptor:
             return_val+=chr(val)
-        print(len(return_val))
         return return_val
 
     def handle_data(self, usb_req):
-#        t = time()
-#        if t - self.lastSend < 0.01 and self.seq % 3 == 0:
-#            #return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
-#            self.send_usb_req(usb_req, '', status=1)
-#            return
+        global newXYZ, newRXYZ, newButtons, event
+        event.wait(0.5)
+        return_val = ''
         lock.acquire()
-        if self.seq % 3 == 0:
-            #self.lastSend = t
-            return_val = struct.pack("<BHHH", 1, trim(xyz[0]),trim(xyz[1]),trim(xyz[2]))
-        elif self.seq % 3 == 1:
+        if newRXYZ:
             return_val = struct.pack("<BHHH", 2, trim(rxyz[0]),trim(rxyz[1]),trim(rxyz[2]))
-        elif self.seq % 3 == 2:
-            return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
+            newRXYZ = False
+        elif newButtons:
+            return_val = struct.pack("BBBB", 3, buttons&0xFF, buttons>>8, 0)
+            newButtons = False
+        elif newXYZ:
+            return_val = struct.pack("<BHHH", 1, trim(xyz[0]),trim(xyz[1]),trim(xyz[2]))
+            newXYZ = False
+            newRXYZ = True
+        if newXYZ or newRXYZ or newButtons:
+            event.set()
+        else:
+            event.clear()
         lock.release()
-        self.send_usb_req(usb_req, return_val)
-        sleep(0.01/3.)
-        self.seq += 1
+        self.send_usb_req(usb_req, return_val, status=(0 if return_val else 1))
 
     def handle_unknown_control(self, control_req, usb_req):
         if control_req.bmRequestType == 0x81:
@@ -254,8 +257,10 @@ usb_container = USBContainer()
 usb_container.add_usb_device(usb_Dev)  # Supports only one device!
           
 def init():
-    if conn == None:
+    if conn is None:
         print("not connected")
+        return
+        
     try:
         print("Init")
         conn.write("P20\rYS\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
@@ -286,12 +291,16 @@ def processData(data):
             rxyz[0] = get16(data, 9)
             rxyz[1] = get16(data, 11)
             rxyz[2] = 0xFFFF&-get16(data, 13)
+        newXYZ = True
+        event.set()
         lock.release()
     elif len(data) == 3 and data[0] == '.':
         b = (ord(data[2])&0xFF) | (ord(data[1])&0xFF)<<8
         b = ((b&0b111111) | ((b&~0b1111111)>>1)) & 0b111111111111;
         lock.acquire()
         buttons = ((b >> 9) | (b << 3)) & 0b111111111111
+        newButtons = True
+        event.set()
         lock.release()
 
 def serialLoop():
