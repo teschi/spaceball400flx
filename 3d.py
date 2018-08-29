@@ -9,10 +9,12 @@ import getopt
 import serial
 import serial.tools.list_ports
 
+running = True
 joystick = False
 port = None
 conn = None
 description = "USB-SERIAL CH340"
+lock = threading.Lock()
 xyz = [0,0,0]
 rxyz = [0,0,0]
 buttons = 0
@@ -29,11 +31,12 @@ def trim(x):
     return x        
 
 def persistentOpen():
-    while True:
+    global conn,running
+    while running:
         try:
             if port is not None:
                 print("Opening "+port)
-                c = serial.Serial(port=port,baudrate=9600)
+                c = serial.Serial(port=port,baudrate=9600,timeout=5)
                 print("Opened")
                 return c
             for p in serial.tools.list_ports.comports():
@@ -48,18 +51,21 @@ def persistentOpen():
             sleep(0.5)
 
 def persistentRead():
-    global conn
-    while True:
+    global conn,running
+    while running:
         try:
             if conn == None:
                 raise serial.SerialException
-            return conn.read()
+            d = conn.read()
+            if len(d) == 1:
+                return d
         except serial.SerialException as e:
             print("Reconnecting after "+str(e))
             try:
                 conn.close()
             except:
                 pass
+            conn = None
             sleep(0.5)
             conn = persistentOpen()
         except Exception as e:
@@ -213,19 +219,22 @@ class USBHID(USBDevice):
         return return_val
 
     def handle_data(self, usb_req):
-        t = time()
-        if t - self.lastSend < 0.01 and self.seq % 3 == 0:
-            #return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
-            self.send_usb_req(usb_req, '', status=1)
-            return
+#        t = time()
+#        if t - self.lastSend < 0.01 and self.seq % 3 == 0:
+#            #return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
+#            self.send_usb_req(usb_req, '', status=1)
+#            return
+        lock.acquire()
         if self.seq % 3 == 0:
-            self.lastSend = t
+            #self.lastSend = t
             return_val = struct.pack("<BHHH", 1, trim(xyz[0]),trim(xyz[1]),trim(xyz[2]))
         elif self.seq % 3 == 1:
             return_val = struct.pack("<BHHH", 2, trim(rxyz[0]),trim(rxyz[1]),trim(rxyz[2]))
         elif self.seq % 3 == 2:
             return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
+        lock.release()
         self.send_usb_req(usb_req, return_val)
+        sleep(0.01/3.)
         self.seq += 1
 
     def handle_unknown_control(self, control_req, usb_req):
@@ -240,21 +249,18 @@ class USBHID(USBDevice):
                 print 'Idle'
                 # Idle
 
-buffer = b''      
-overflow = False
-escape = False
-req = USBRequest()
 usb_Dev = USBHID()
 usb_container = USBContainer()
 usb_container.add_usb_device(usb_Dev)  # Supports only one device!
           
 def init():
+    if conn == None:
+        print("not connected")
     try:
         print("Init")
         conn.write("P20\rYS\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
     except serial.SerialException:
         print("Failed init")
-        pass
         
 reinit = time()
 
@@ -265,6 +271,7 @@ def processData(data):
     global reinit,buttons,xyz,rxyz
     if len(data) == 15 and data[0] == 'D':
         reinit = time()
+        lock.acquire()
         if joystick:
             xyz[0] = get16(data, 3);
             xyz[2] = get16(data, 5);
@@ -279,42 +286,60 @@ def processData(data):
             rxyz[0] = get16(data, 9)
             rxyz[1] = get16(data, 11)
             rxyz[2] = 0xFFFF&-get16(data, 13)
+        lock.release()
     elif len(data) == 3 and data[0] == '.':
         b = (ord(data[2])&0xFF) | (ord(data[1])&0xFF)<<8
         b = ((b&0b111111) | ((b&~0b1111111)>>1)) & 0b111111111111;
+        lock.acquire()
         buttons = ((b >> 9) | (b << 3)) & 0b111111111111
+        lock.release()
 
 def serialLoop():
-    global buffer
-    global conn
+    global conn,running
+    overflow = False
+    buffer = b''
+    escape = False
     conn = persistentOpen()
     init()
-    while True:
+    while running:
         c = persistentRead()
+        if c == b'\r':
+            processData(buffer)
+            buffer = ''
+            continue                
         if escape:
             if c == b'Q' or c == b'S' or c == b'M':
-                c &= 0b10111111
-        else:
-            if c == b'\r':
-                processData(buffer)
-                buffer = ''
-                continue
+                c = chr(ord(c)&0b10111111)
+            escape = False
         if len(buffer) < 256:
-            buffer += c
+            if c == '^':
+                escape = True
+            else:
+                buffer += c
             overflow = False
         else:
             overflow = True
 
 def reconnectionLoop():
-    while True:
+    global running
+    while running:
         delta = time() - reinit
         if delta >= 5:
             init()
-        sleep(delta+0.01)
+        sleep(5.01-delta)
 
-threading.Thread(target=serialLoop).start()
-threading.Thread(target=reconnectionLoop).start()
+t1 = threading.Thread(target=serialLoop)
+t1.daemon = True
+t1.start()
+t2 = threading.Thread(target=reconnectionLoop)
+t2.daemon = True
+t2.start()
 #threading.Thread(target=usb_container.run).start()
-usb_container.run()
-
+print("Press ctrl-c to exit")
+try:
+    usb_container.run()
+except KeyboardInterrupt:
+    print("Exiting...")
+    running = False
+    sys.exit(0)
 # Run in cmd: usbip.exe -a 127.0.0.1 "1-1"
