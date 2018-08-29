@@ -288,7 +288,6 @@ class USBDevice():
                                                    interval=0x0,
                                                    data=usb_res).pack())
 
-
     def handle_get_descriptor(self, control_req, usb_req):
         handled = False
         if control_req.wValue == 0x1: # Device
@@ -336,7 +335,6 @@ class USBContainer:
         self.usb_devices.append(usb_device)
 
     def handle_attach(self):
-        print("attach")
         return OPREPImport(base=USBIPHeader(command=3, status=0),
                            usbPath='/sys/devices/pci0000:00/0000:00:01.2/usb1/1-1',
                            busID='1-1',
@@ -354,7 +352,6 @@ class USBContainer:
                            bNumInterfaces=self.usb_devices[0].bNumInterfaces)
 
     def handle_device_list(self):
-        print("list")
         usb_dev = self.usb_devices[0]
         return OPREPDevList(base=USBIPHeader(command=5,status=0),
                             nExportedDevice=1,

@@ -2,7 +2,7 @@ from random import randint
 import datetime
 import struct
 from time import sleep,time
-from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer
+from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
 import sys
 import threading
 import getopt
@@ -17,15 +17,16 @@ xyz = [0,0,0]
 rxyz = [0,0,0]
 buttons = 0
 
+trimValue = 100000
+
 def trim(x):
     if x&0x8000:
-        if (-x)&0x7FFF > 500: 
-            return (-500)&0xFFFF        
+        if (-x)&0xFFFF > trimValue: 
+            return (-trimValue)&0xFFFF        
     else:
-        if x > 500:
-            return 500
-    return x
-        
+        if x > trimValue:
+            return trimValue
+    return x        
 
 def persistentOpen():
     while True:
@@ -95,8 +96,8 @@ descriptor = [
           0xa1, 0x01,           #  Collection (Application)  
           0xa1, 0x00,           # Collection (Physical)
           0x85, 0x01,           #  Report ID 
-          0x16, 0x0c, 0xfe,        #logical minimum (-500)
-          0x26, 0xf4, 0x01,        #logical maximum (500)
+          #0x16, 0x0c, 0xfe,        #logical minimum (-500)
+          #0x26, 0xf4, 0x01,        #logical maximum (500)
           0x36, 0x00, 0x80,              # Physical Minimum (-32768)
           0x46, 0xff, 0x7f,              #Physical Maximum (32767)
           0x09, 0x30,           #    Usage (X)  
@@ -108,8 +109,8 @@ descriptor = [
           0xC0,                 #  End Collection  
           0xa1, 0x00,            # Collection (Physical)
           0x85, 0x02,         #  Report ID 
-          0x16,0x0c,0xfe,        #logical minimum (-500)
-          0x26,0xf4,0x01,        #logical maximum (500)
+          #0x16,0x0c,0xfe,        #logical minimum (-500)
+          #0x26,0xf4,0x01,        #logical maximum (500)
           0x36,0x00,0x80,              # Physical Minimum (-32768)
           0x46,0xff,0x7f,              #Physical Maximum (32767)
           0x09, 0x33,           #    Usage (RX)  
@@ -198,6 +199,8 @@ class USBHID(USBDevice):
     def __init__(self):
         USBDevice.__init__(self)
         self.start_time = datetime.datetime.now()
+        self.lastSend = -1
+        self.seq = 0
 
     def generate_hid_report(self):
         usage = 0x04 if joystick else 0x08
@@ -210,15 +213,20 @@ class USBHID(USBDevice):
         return return_val
 
     def handle_data(self, usb_req):
-        if usb_req.seqnum % 3 == 0:
+        t = time()
+        if t - self.lastSend < 0.01 and self.seq % 3 == 0:
+            #return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
+            self.send_usb_req(usb_req, '', status=1)
+            return
+        if self.seq % 3 == 0:
+            self.lastSend = t
             return_val = struct.pack("<BHHH", 1, trim(xyz[0]),trim(xyz[1]),trim(xyz[2]))
-            self.send_usb_req(usb_req, return_val)
-        elif usb_req.seqnum % 3 == 1:
+        elif self.seq % 3 == 1:
             return_val = struct.pack("<BHHH", 2, trim(rxyz[0]),trim(rxyz[1]),trim(rxyz[2]))
-            self.send_usb_req(usb_req, return_val)        
-        elif usb_req.seqnum % 3 == 2:
+        elif self.seq % 3 == 2:
             return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
-            self.send_usb_req(usb_req, return_val)        
+        self.send_usb_req(usb_req, return_val)
+        self.seq += 1
 
     def handle_unknown_control(self, control_req, usb_req):
         if control_req.bmRequestType == 0x81:
@@ -231,11 +239,14 @@ class USBHID(USBDevice):
             if control_req.bRequest == 0x0a:  # set idle
                 print 'Idle'
                 # Idle
-                pass
 
 buffer = b''      
 overflow = False
 escape = False
+req = USBRequest()
+usb_Dev = USBHID()
+usb_container = USBContainer()
+usb_container.add_usb_device(usb_Dev)  # Supports only one device!
           
 def init():
     try:
@@ -301,9 +312,6 @@ def reconnectionLoop():
             init()
         sleep(delta+0.01)
 
-usb_Dev = USBHID()
-usb_container = USBContainer()
-usb_container.add_usb_device(usb_Dev)  # Supports only one device!
 threading.Thread(target=serialLoop).start()
 threading.Thread(target=reconnectionLoop).start()
 #threading.Thread(target=usb_container.run).start()
