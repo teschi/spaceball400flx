@@ -8,7 +8,9 @@ import threading
 import getopt
 import serial
 import serial.tools.list_ports
+import subprocess
 
+sensitivity = 'S' # Standard/Cubic
 running = True
 joystick = False
 port = None
@@ -21,7 +23,10 @@ buttons = 0
 newButtons = False
 newXYZ = False
 newRXYZ = False
-trimValue = 100000
+trimValue = 32768
+forceVendorID = None
+forceProductID = None
+usbip = "usbip.exe"
 event = threading.Event()
 
 def trim(x):
@@ -73,17 +78,22 @@ def persistentRead():
         except Exception as e:
             print(str(e))
 
-opts, args = getopt.getopt(sys.argv[1:], "hljp:d:", ["list-ports","help","joystick","port=","description="])
+opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["usbip=", "max", "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
     opt,arg = opts[i]
     if opt in ('-h', '--help'):
         print("""python 3d.py [options]\n
--h --help:       this information
--j --joystick:   HID joystick mode
--l --list-ports: list serial ports
--pCOMx | --port=COMx: COM port of SpaceBall 4000
--ddesc | --description=desc: description of COM port device starts with desc""")
+-h --help             this information
+-j --joystick         HID joystick mode 
+-l --list-ports       list serial ports
+-c --cubic            cubic sensitivity mode
+-mMAX --max=MAX       set maximum value for all axes
+-VVID --vendor=VID    force vendor ID
+-PPID --product=PID   force product ID
+-udir --usbip=dir     directory of usbip.exe
+-pCOMx | --port=COMx  COM port of SpaceBall 4000
+-ddesc | --description=desc  description of COM port device starts with desc""")
         sys.exit(0)
     elif opt in ('-j', '--joystick'):
         joystick = True
@@ -92,16 +102,28 @@ while i < len(opts):
         description = None
     elif opt in ('-l', '--list-ports'):
         for p in serial.tools.list_ports.comports():
-            print(p.device, p.description)
+            print(p.device+": "+p.description)
         sys.exit(0)
     elif opt in ('-d', '--description'):
         port = None
         description = arg
-        
+    elif opt in ('-c', '--cubic-mode'):
+        sensitivity = 'S'
+    elif opt in ('-V', '--vendor'):
+        forceVendorID = int(arg, 16)
+    elif opt in ('-P', '--product'):
+        forceProductID = int(arg, 16)        
+    elif opt in ('-m', '--max'):
+        trimValue = int(arg)
+    elif opt in ('-u', '--usbip'):
+        if arg[-1] == '/' or arg[-1] == ':':
+            usbip = arg + "usbip.exe"
+        elif arg[-1] == '':
+            usbip = "usbip.exe"
+        else:
+            usbip = arg + "/" + "usbip.exe"
     i += 1
 
-print("Joystick = "+str(joystick))        
-        
 # HID Configuration
 
 descriptor = [
@@ -197,8 +219,8 @@ configuration.interfaces = [interface_d]   # Supports only one interface
 
 
 class USBHID(USBDevice):
-    vendorID = 0x1EAF if joystick else 0x46D
-    productID = 0xc62b
+    vendorID = forceVendorID if forceVendorID is not None else (0x1EAF if joystick  else 0x46D)
+    productID = forceProductID if forceProductID is not None else 0xc62b
     bcdDevice = 0x200
     bcdUSB = 0x200
     bNumConfigurations = 0x1
@@ -269,7 +291,7 @@ def init():
         
     try:
         print("Init")
-        conn.write("P20\rYS\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
+        conn.write("P20\rY" + sensitivity + "\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
     except serial.SerialException:
         print("Failed init")
         
@@ -349,6 +371,8 @@ t1.start()
 t2 = threading.Thread(target=reconnectionLoop)
 t2.daemon = True
 t2.start()
+print("Starting "+usbip)
+subprocess.Popen([usbip, "-a", "localhost", "1-1"])
 #threading.Thread(target=usb_container.run).start()
 print("Press ctrl-c to exit")
 try:
