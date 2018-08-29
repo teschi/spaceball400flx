@@ -73,14 +73,15 @@ def persistentRead():
         except Exception as e:
             print(str(e))
 
-opts, args = getopt.getopt(sys.argv[1:], "hjp:d:", ["help","joystick","port=","description="])
+opts, args = getopt.getopt(sys.argv[1:], "hljp:d:", ["list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
     opt,arg = opts[i]
     if opt in ('-h', '--help'):
         print("""python 3d.py [options]\n
--h --help:     this information
--j --joystick: HID joystick mode
+-h --help:       this information
+-j --joystick:   HID joystick mode
+-l --list-ports: list serial ports
 -pCOMx | --port=COMx: COM port of SpaceBall 4000
 -ddesc | --description=desc: description of COM port device starts with desc""")
         sys.exit(0)
@@ -89,9 +90,14 @@ while i < len(opts):
     elif opt in ('-p', '--port'):
         port = arg
         description = None
+    elif opt in ('-l', '--list-ports'):
+        for p in serial.tools.list_ports.comports():
+            print(p.device, p.description)
+        sys.exit(0)
     elif opt in ('-d', '--description'):
         port = None
         description = arg
+        
     i += 1
 
 print("Joystick = "+str(joystick))        
@@ -219,7 +225,7 @@ class USBHID(USBDevice):
         return return_val
 
     def handle_data(self, usb_req):
-        global newXYZ, newRXYZ, newButtons, event
+        global newXYZ, newRXYZ, newButtons, event, lock
         event.wait(0.5)
         return_val = ''
         lock.acquire()
@@ -273,7 +279,7 @@ def get16(data,offset):
     return (ord(data[offset+1])&0xFF) | ((ord(data[offset])&0xFF)<<8)
 
 def processData(data):
-    global reinit,buttons,xyz,rxyz
+    global reinit,buttons,xyz,rxyz,newXYZ,newRXYZ,newButtons,lock,event
     if len(data) == 15 and data[0] == 'D':
         reinit = time()
         lock.acquire()
