@@ -17,6 +17,16 @@ xyz = [0,0,0]
 rxyz = [0,0,0]
 buttons = 0
 
+def trim(x):
+    if x&0x8000:
+        if (-x)&0x7FFF > 500: 
+            return (-500)&0xFFFF        
+    else:
+        if x > 500:
+            return 500
+    return x
+        
+
 def persistentOpen():
     while True:
         try:
@@ -85,8 +95,8 @@ descriptor = [
           0xa1, 0x01,           #  Collection (Application)  
           0xa1, 0x00,           # Collection (Physical)
           0x85, 0x01,           #  Report ID 
-        #  0x16, 0x0c, 0xfe,        #logical minimum (-500)
-        #  0x26, 0xf4, 0x01,        #logical maximum (500)
+          0x16, 0x0c, 0xfe,        #logical minimum (-500)
+          0x26, 0xf4, 0x01,        #logical maximum (500)
           0x36, 0x00, 0x80,              # Physical Minimum (-32768)
           0x46, 0xff, 0x7f,              #Physical Maximum (32767)
           0x09, 0x30,           #    Usage (X)  
@@ -98,8 +108,8 @@ descriptor = [
           0xC0,                 #  End Collection  
           0xa1, 0x00,            # Collection (Physical)
           0x85, 0x02,         #  Report ID 
-        #  0x16,0x0c,0xfe,        #logical minimum (-500)
-        #  0x26,0xf4,0x01,        #logical maximum (500)
+          0x16,0x0c,0xfe,        #logical minimum (-500)
+          0x26,0xf4,0x01,        #logical maximum (500)
           0x36,0x00,0x80,              # Physical Minimum (-32768)
           0x46,0xff,0x7f,              #Physical Maximum (32767)
           0x09, 0x33,           #    Usage (RX)  
@@ -201,10 +211,10 @@ class USBHID(USBDevice):
 
     def handle_data(self, usb_req):
         if usb_req.seqnum % 3 == 0:
-            return_val = struct.pack("<BHHH", 1, xyz[0],xyz[1],xyz[2])
+            return_val = struct.pack("<BHHH", 1, trim(xyz[0]),trim(xyz[1]),trim(xyz[2]))
             self.send_usb_req(usb_req, return_val)
         elif usb_req.seqnum % 3 == 1:
-            return_val = struct.pack("<BHHH", 2, rxyz[0],rxyz[1],rxyz[2])
+            return_val = struct.pack("<BHHH", 2, trim(rxyz[0]),trim(rxyz[1]),trim(rxyz[2]))
             self.send_usb_req(usb_req, return_val)        
         elif usb_req.seqnum % 3 == 2:
             return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
