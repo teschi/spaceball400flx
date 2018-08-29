@@ -2,7 +2,7 @@ import socket
 import struct
 import types
 
-USBIP_VERSION = 273
+USBIP_VERSION = 273 # 273 for the unsigned patched driver and 262 for the old signed driver
 
 def rev(u):
     return (((u>>8) | (u<<8)) &0xFFFF)
