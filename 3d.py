@@ -201,10 +201,10 @@ class USBHID(USBDevice):
 
     def handle_data(self, usb_req):
         if usb_req.seqnum % 3 == 0:
-            return_val = struct.pack(">BHHH", 1, xyz[0],xyz[1],xyz[2])
+            return_val = struct.pack("<BHHH", 1, xyz[0],xyz[1],xyz[2])
             self.send_usb_req(usb_req, return_val)
         elif usb_req.seqnum % 3 == 1:
-            return_val = struct.pack(">BHHH", 2, rxyz[0],rxyz[1],rxyz[2])
+            return_val = struct.pack("<BHHH", 2, rxyz[0],rxyz[1],rxyz[2])
             self.send_usb_req(usb_req, return_val)        
         elif usb_req.seqnum % 3 == 2:
             return_val = struct.pack("BBBB", 3, buttons & 0xFF,buttons >> 8, 0)
@@ -238,7 +238,7 @@ def init():
 reinit = time()
 
 def get16(data,offset):
-    return (ord(data[offset])&0xFF) | ((ord(data[offset+1])&0xFF)<<8)
+    return (ord(data[offset+1])&0xFF) | ((ord(data[offset])&0xFF)<<8)
 
 def processData(data):
     global reinit,buttons,xyz,rxyz
