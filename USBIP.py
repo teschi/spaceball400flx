@@ -1,7 +1,8 @@
-
 import socket
 import struct
 import types
+
+USBIP_VERSION = 273
 
 def rev(u):
     return (((u>>8) | (u<<8)) &0xFFFF)
@@ -69,7 +70,7 @@ def int_to_hex_string(val):
 
 class USBIPHeader(BaseStucture):
     _fields_ = [
-        ('version', 'H', 273), ## 262 for signed version
+        ('version', 'H', USBIP_VERSION),
         ('command', 'H'),
         ('status', 'I')
     ]

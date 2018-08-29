@@ -78,7 +78,7 @@ def persistentRead():
         except Exception as e:
             print(str(e))
 
-opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["usbip=", "max", "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
+opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["usbip-directory=", "max", "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
     opt,arg = opts[i]
@@ -91,8 +91,7 @@ while i < len(opts):
 -mMAX --max=MAX       set maximum value for all axes
 -VVID --vendor=VID    force vendor ID
 -PPID --product=PID   force product ID
--udir --usbip=dir     directory of usbip.exe
--pCOMx | --port=COMx  COM port of SpaceBall 4000
+-pCOMx | --port=COMx         COM port of SpaceBall 4000
 -ddesc | --description=desc  description of COM port device starts with desc""")
         sys.exit(0)
     elif opt in ('-j', '--joystick'):
@@ -115,7 +114,7 @@ while i < len(opts):
         forceProductID = int(arg, 16)        
     elif opt in ('-m', '--max'):
         trimValue = int(arg)
-    elif opt in ('-u', '--usbip'):
+    elif opt in ('-u', '--usbip-exe'):
         if arg[-1] == '/' or arg[-1] == ':':
             usbip = arg + "usbip.exe"
         elif arg[-1] == '':
