@@ -12,6 +12,7 @@ import serial.tools.list_ports
 import subprocess
 import ctypes, sys, os
 import uninstall
+import signal
 
 def is_admin():
     try:
@@ -396,15 +397,23 @@ t1.start()
 t2 = threading.Thread(target=reconnectionLoop)
 t2.daemon = True
 t2.start()
+
+def exitFunction():
+    global running
+    if running:
+        print("Exiting...")
+        running = False
+        if USBIP_VERSION == 262:
+            uninstallDriver()
+        sys.exit(0)
+
+atexit.register(exitFunction)
+
+signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
+signal.signal(signal.SIGINT, lambda x,y: exitFunction())
+
 print("Starting "+usbip)
 subprocess.Popen([usbip, "-a", "localhost", "1-1"])
-if USBIP_VERSION == 262:
-    atexit.register(uninstallDriver)
 print("Press ctrl-c to exit")
 
-try:
-    usb_container.run()
-except KeyboardInterrupt:
-    print("Exiting...")
-    running = False
-    sys.exit(0)
+usb_container.run()
