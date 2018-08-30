@@ -76,6 +76,7 @@ def persistentOpen():
                     c = serial.Serial(port=p.device,baudrate=9600)
                     print("Opened")
                     return c
+            sleep(0.5)
         except serial.SerialException as e:
             print("Error "+str(e))
             sleep(0.5)
