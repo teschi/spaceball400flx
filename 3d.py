@@ -1,4 +1,5 @@
 from __future__ import print_function
+import atexit
 import datetime
 import struct
 from time import sleep,time
@@ -370,8 +371,9 @@ t2.daemon = True
 t2.start()
 print("Starting "+usbip)
 subprocess.Popen([usbip, "-a", "localhost", "1-1"])
-#threading.Thread(target=usb_container.run).start()
+atexit.register(lambda : print("exiting"))
 print("Press ctrl-c to exit")
+
 try:
     usb_container.run()
 except KeyboardInterrupt:

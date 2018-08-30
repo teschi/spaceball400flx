@@ -65,6 +65,8 @@ class BaseStucture(object):
 
 
 def int_to_hex_string(val):
+    if val == 0:
+        return b'\0'
     out = bytearray()
     while val:
         out.append(val & 0xFF)
