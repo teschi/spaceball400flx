@@ -341,14 +341,13 @@ def serialLoop():
             continue                
         if escape:
             if c == b'Q' or c == b'S' or c == b'M':
-                c = bytes((ord(c)&0b10111111,))
-                print("tweak")
+                c = bytes(bytearray((ord(c)&0b10111111,)))
             escape = False
+        elif c == b'^':
+            escape = True
+            continue
         if len(buffer) < 256:
-            if c == b'^':
-                escape = True
-            else:
-                buffer.append(c[0])
+            buffer += c
             overflow = False
         else:
             overflow = True

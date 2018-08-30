@@ -65,15 +65,11 @@ class BaseStucture(object):
 
 
 def int_to_hex_string(val):
-#    if sys.version_info[0] < 3:
-#        o = str(format(val, 'x')).decode('hex')
-#        return o
-#    else:
-        out = bytearray()
-        while val:
-            out.append(val & 0xFF)
-            val >>= 8
-        return bytes(out[::-1])
+    out = bytearray()
+    while val:
+        out.append(val & 0xFF)
+        val >>= 8
+    return bytes(out[::-1])
 
 class USBIPHeader(BaseStucture):
     _fields_ = [
