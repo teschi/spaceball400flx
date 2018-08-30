@@ -414,7 +414,7 @@ signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
 signal.signal(signal.SIGINT, lambda x,y: exitFunction())
 
 print("Starting "+usbip)
-subprocess.Popen([usbip, "-a", "localhost", "1-1"])
+subprocess.Popen([usbip, "-a", "localhost", "1-1"],creationflags=0x00000200)
 print("Press ctrl-c to exit")
 
 usb_container.run()
