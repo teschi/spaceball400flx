@@ -1,6 +1,7 @@
 #! python
 #
 # (C) 2001-2016 Chris Liechti <cliechti@gmx.net>
+# (C) 2018 Alexander Pruss
 #
 # SPDX-License-Identifier:    BSD-3-Clause
 
