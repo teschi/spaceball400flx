@@ -391,6 +391,7 @@ def uninstallDriver():
         print("Success uninstalling driver")
     else:
         print("Failure uninstalling driver")
+        sleep(10)
 
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True

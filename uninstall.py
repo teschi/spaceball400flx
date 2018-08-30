@@ -129,7 +129,7 @@ def uninstallUSBHID(vendorID,productID):
     uninstalled = False
     error = False
     
-    searchString = "USB\VID_046D&PID_C62B"
+    searchString = "USB\VID_%04X&PID_%04X" % (vendorID,productID)
     GUIDs = (GUID * 8)()  # so far only seen one used, so hope 8 are enough...
     guids_size = DWORD()
     if not SetupDiClassGuidsFromName(
@@ -180,6 +180,7 @@ def uninstallUSBHID(vendorID,productID):
                 if SetupDiCallClassInstaller(DIF_REMOVE, g_hdi, ctypes.byref(devinfo)):
                     uninstalled = True
                 else:
+                    print("Error uninstalling "+szHardwareID.value)
                     error = True
         SetupDiDestroyDeviceInfoList(g_hdi)
     return uninstalled and not error
