@@ -3,14 +3,35 @@ import atexit
 import datetime
 import struct
 from time import sleep,time
-from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
+from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest, USBIP_VERSION
 import sys
 import threading
 import getopt
 import serial
 import serial.tools.list_ports
 import subprocess
+import ctypes, sys, os
+import uninstall
 
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+if USBIP_VERSION == 262 and not is_admin():
+    def u(z):
+        if sys.version_info[0] >= 3:
+            return z
+        else:
+            return unicode(z)
+    args = u(__file__)
+    if len(sys.argv) >= 2:
+        args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
+    print(args)
+    ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
+    sys.exit(0)
+    
 sensitivity = b'S' # Standard/Cubic
 running = True
 joystick = False
@@ -362,6 +383,12 @@ def reconnectionLoop():
         else:
             sleep(5.01-delta)
         sleep(1)
+        
+def uninstallDriver():
+    if uninstall.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
+        print("Success uninstalling driver")
+    else:
+        print("Failure uninstalling driver")
 
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
@@ -371,7 +398,8 @@ t2.daemon = True
 t2.start()
 print("Starting "+usbip)
 subprocess.Popen([usbip, "-a", "localhost", "1-1"])
-atexit.register(lambda : print("exiting"))
+if USBIP_VERSION == 262:
+    atexit.register(uninstallDriver)
 print("Press ctrl-c to exit")
 
 try:
@@ -380,4 +408,3 @@ except KeyboardInterrupt:
     print("Exiting...")
     running = False
     sys.exit(0)
-# Run in cmd: usbip.exe -a 127.0.0.1 "1-1"

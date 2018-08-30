@@ -423,4 +423,3 @@ class USBContainer(object):
                     self.usb_devices[0].connection = conn
                     self.usb_devices[0].handle_usb_request(usb_req)
             conn.close()
-
