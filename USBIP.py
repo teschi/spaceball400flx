@@ -1,4 +1,5 @@
 import socket
+import sys
 import struct
 import types
 
@@ -7,7 +8,7 @@ USBIP_VERSION = 273 # 273 for the unsigned patched driver and 262 for the old si
 def rev(u):
     return (((u>>8) | (u<<8)) &0xFFFF)
 
-class BaseStucture:
+class BaseStucture(object):
     def __init__(self, **kwargs):
         self.init_from_dict(**kwargs)
         for field in self._fields_:
@@ -23,10 +24,9 @@ class BaseStucture:
         return struct.calcsize(self.format())
 
     def format(self):
-
         pack_format = '>'
         for field in self._fields_:
-            if type(field[1]) is types.InstanceType:
+            if hasattr(field[1],'__dict__'):
                 if BaseStucture in field[1].__class__.__bases__:
                     pack_format += str(field[1].size()) + 's'
             elif 'si' == field[1]:
@@ -40,7 +40,7 @@ class BaseStucture:
     def pack(self):
         values = []
         for field in self._fields_:
-            if type(field[1]) is types.InstanceType:
+            if hasattr(field[1], '__dict__'):
                 if BaseStucture in field[1].__class__.__bases__:
                      values.append(getattr(self, field[0], 0).pack())
             else:
@@ -49,7 +49,6 @@ class BaseStucture:
                 else:
                     values.append(getattr(self, field[0], 0))
         return struct.pack(self.format(), *values)
-
 
     def unpack(self, buf):
         values = struct.unpack(self.format(), buf)
@@ -65,8 +64,15 @@ class BaseStucture:
 
 
 def int_to_hex_string(val):
-    return str(format(val, 'x')).decode('hex')
-
+#    if sys.version_info[0] < 3:
+#        o = str(format(val, 'x')).decode('hex')
+#        return o
+#    else:
+        out = bytearray()
+        while val:
+            out.append(val & 0xFF)
+            val >>= 8
+        return bytes(out[::-1])
 
 class USBIPHeader(BaseStucture):
     _fields_ = [
@@ -254,7 +260,7 @@ class USBRequest():
             setattr(self, key, value)
 
 
-class USBDevice():
+class USBDevice(object):
     '''interfaces = [USBInterface(bInterfaceClass=0x3, bInterfaceSubClass=0x0, bInterfaceProtocol=0x0)]
     speed=2
     speed = 2
@@ -329,7 +335,7 @@ class USBDevice():
         else:
             self.handle_data(usb_req)
 
-class USBContainer:
+class USBContainer(object):
     usb_devices = []
 
     def add_usb_device(self, usb_device):
@@ -337,8 +343,8 @@ class USBContainer:
 
     def handle_attach(self):
         return OPREPImport(base=USBIPHeader(command=3, status=0),
-                           usbPath='/sys/devices/pci0000:00/0000:00:01.2/usb1/1-1',
-                           busID='1-1',
+                           usbPath=b'/sys/devices/pci0000:00/0000:00:01.2/usb1/1-1',
+                           busID=b'1-1',
                            busnum=1,
                            devnum=2,
                            speed=2,
@@ -356,8 +362,8 @@ class USBContainer:
         usb_dev = self.usb_devices[0]
         return OPREPDevList(base=USBIPHeader(command=5,status=0),
                             nExportedDevice=1,
-                            usbPath='/sys/devices/pci0000:00/0000:00:01.2/usb1/1-1',
-                            busID='1-1',
+                            usbPath=b'/sys/devices/pci0000:00/0000:00:01.2/usb1/1-1',
+                            busID=b'1-1',
                             busnum=1,
                             devnum=2,
                             speed=2,
@@ -383,7 +389,7 @@ class USBContainer:
         attached = False
         while 1:
             conn, addr = s.accept()
-            print 'Connection address:', addr
+            print('Connection address:', addr)
             req = USBIPHeader()
             while 1:
                 if not attached:
@@ -391,18 +397,18 @@ class USBContainer:
                     if not data:
                         break
                     req.unpack(data)
-                    print 'Header Packet'
-                    print 'command:', hex(req.command)
+                    print('Header Packet')
+                    print('command:', hex(req.command))
                     if req.command == 0x8005:
-                        print 'list of devices'
+                        print('list of devices')
                         conn.sendall(self.handle_device_list().pack())
                     elif req.command == 0x8003:
-                        print 'attach device'
+                        print('attach device')
                         conn.recv(32)  # receive bus id
                         conn.sendall(self.handle_attach().pack())
                         attached = True
                 else:
-                    #print 'handles requests'
+                    #print('handles requests')
                     cmd = USBIPCMDSubmit()
                     data = conn.recv(cmd.size())
                     cmd.unpack(data)

@@ -10,7 +10,7 @@ import serial
 import serial.tools.list_ports
 import subprocess
 
-sensitivity = 'S' # Standard/Cubic
+sensitivity = b'S' # Standard/Cubic
 running = True
 joystick = False
 port = None
@@ -107,7 +107,7 @@ while i < len(opts):
         port = None
         description = arg
     elif opt in ('-c', '--cubic-mode'):
-        sensitivity = 'S'
+        sensitivity = b'S'
     elif opt in ('-V', '--vendor'):
         forceVendorID = int(arg, 16)
     elif opt in ('-P', '--product'):
@@ -239,16 +239,18 @@ class USBHID(USBDevice):
 
     def generate_hid_report(self):
         usage = 0x04 if joystick else 0x08
-                
-        return_val = ''
-        for val in descriptor:
-            return_val+=chr(val)
-        return return_val
+        if sys.version_info[0] < 3:
+            return_val = ''
+            for b in descriptor:
+                return_val += chr(b)
+            return bytes(return_val)
+        else:
+            return bytes(descriptor)
 
     def handle_data(self, usb_req):
         global newXYZ, newRXYZ, newButtons, event, lock
         event.wait(0.5)
-        return_val = ''
+        return_val = b''
         lock.acquire()
         if newRXYZ:
             return_val = struct.pack("<BHHH", 2, trim(rxyz[0]),trim(rxyz[1]),trim(rxyz[2]))
@@ -271,12 +273,12 @@ class USBHID(USBDevice):
         if control_req.bmRequestType == 0x81:
             if control_req.bRequest == 0x6:  # Get Descriptor
                 if control_req.wValue == 0x22:  # send initial report
-                    print 'send initial report'
+                    print('send report descriptor')
                     self.send_usb_req(usb_req, self.generate_hid_report())
 
         if control_req.bmRequestType == 0x21:  # Host Request
             if control_req.bRequest == 0x0a:  # set idle
-                print 'Idle'
+                pass
                 # Idle
 
 usb_Dev = USBHID()
@@ -290,18 +292,18 @@ def init():
         
     try:
         print("Init")
-        conn.write("P20\rY" + sensitivity + "\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
+        conn.write(b"P20\rY" + sensitivity + b"\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
     except serial.SerialException:
         print("Failed init")
         
 reinit = time()
 
 def get16(data,offset):
-    return (ord(data[offset+1])&0xFF) | ((ord(data[offset])&0xFF)<<8)
+    return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
 
 def processData(data):
     global reinit,buttons,xyz,rxyz,newXYZ,newRXYZ,newButtons,lock,event
-    if len(data) == 15 and data[0] == 'D':
+    if len(data) == 15 and data[0] == ord(b'D'):
         reinit = time()
         lock.acquire()
         if joystick:
@@ -321,8 +323,8 @@ def processData(data):
         newXYZ = True
         event.set()
         lock.release()
-    elif len(data) == 3 and data[0] == '.':
-        b = (ord(data[2])&0xFF) | (ord(data[1])&0xFF)<<8
+    elif len(data) == 3 and data[0] == ord(b'.'):
+        b = (data[2]&0xFF) | (data[1]&0xFF)<<8
         b = ((b&0b111111) | ((b&~0b1111111)>>1)) & 0b111111111111;
         lock.acquire()
         buttons = ((b >> 9) | (b << 3)) & 0b111111111111
@@ -333,25 +335,27 @@ def processData(data):
 def serialLoop():
     global conn,running
     overflow = False
-    buffer = b''
+    buffer = bytearray()
     escape = False
     conn = persistentOpen()
     init()
     while running:
         c = persistentRead()
         if c == b'\r':
-            processData(buffer)
-            buffer = ''
+            if len(buffer):
+                processData(buffer)
+                buffer = bytearray()
             continue                
         if escape:
             if c == b'Q' or c == b'S' or c == b'M':
-                c = chr(ord(c)&0b10111111)
+                c = bytes((ord(c)&0b10111111,))
+                print("tweak")
             escape = False
         if len(buffer) < 256:
-            if c == '^':
+            if c == b'^':
                 escape = True
             else:
-                buffer += c
+                buffer.append(c[0])
             overflow = False
         else:
             overflow = True
@@ -362,7 +366,9 @@ def reconnectionLoop():
         delta = time() - reinit
         if delta >= 5:
             init()
-        sleep(5.01-delta)
+        else:
+            sleep(5.01-delta)
+        sleep(1)
 
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
