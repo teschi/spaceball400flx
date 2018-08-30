@@ -1,4 +1,4 @@
-from random import randint
+from __future__ import print_function
 import datetime
 import struct
 from time import sleep,time
@@ -238,14 +238,7 @@ class USBHID(USBDevice):
         self.seq = 0
 
     def generate_hid_report(self):
-        usage = 0x04 if joystick else 0x08
-        if sys.version_info[0] < 3:
-            return_val = ''
-            for b in descriptor:
-                return_val += chr(b)
-            return bytes(return_val)
-        else:
-            return bytes(descriptor)
+        return bytes(bytearray(descriptor))
 
     def handle_data(self, usb_req):
         global newXYZ, newRXYZ, newButtons, event, lock
