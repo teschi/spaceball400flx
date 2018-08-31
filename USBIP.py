@@ -403,7 +403,6 @@ class USBContainer(object):
                         conn.sendall(self.handle_attach().pack())
                         attached = True
                 else:
-                    #print('handles requests')
                     cmd = USBIPCMDSubmit()
                     data = conn.recv(cmd.size())
                     cmd.unpack(data)

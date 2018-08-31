@@ -14,6 +14,8 @@ import ctypes, sys, os
 import uninstall
 import signal
 
+noLaunch = False
+noAdmin = False
 sensitivity = b'S' # Standard/Cubic
 running = True
 joystick = False
@@ -35,7 +37,8 @@ event = threading.Event()
 
 builtins.USBIP_VERSION = 273 # 273 for the unsigned patched driver and 262 for the old signed driver
 
-opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["usbip-directory=", "max", "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
+opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["no-admin", "no-launch", "usbip-directory=", "max", 
+                    "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
     opt,arg = opts[i]
@@ -78,6 +81,10 @@ while i < len(opts):
             usbip = "usbip.exe"
         else:
             usbip = arg + "/" + "usbip.exe"
+    elif opt in ('--no-admin',):
+        noAdmin = True
+    elif opt in ('--no-launch',):
+        noLaunch = True
     i += 1
 
 u = subprocess.Popen([usbip, "-v"], stdout=subprocess.PIPE)
@@ -90,7 +97,7 @@ def is_admin():
     except:
         return False
 
-if builtins.USBIP_VERSION == 262:
+if builtins.USBIP_VERSION == 262 and not noAdmin:
     import platform
     if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
         print("With the signed driver on Windows x64, please use a 64-bit Python interpreter.")
@@ -428,8 +435,9 @@ atexit.register(exitFunction)
 signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
 signal.signal(signal.SIGINT, lambda x,y: exitFunction())
 
-print("Starting "+usbip)
-subprocess.Popen([usbip, "-a", "localhost", "1-1"],creationflags=0x00000200)
-print("Press ctrl-c to exit")
+if not noLaunch:
+    print("Starting "+usbip)
+    subprocess.Popen([usbip, "-a", "localhost", "1-1"],creationflags=0x00000200)
+    print("Press ctrl-c to exit")
 
 usb_container.run()
