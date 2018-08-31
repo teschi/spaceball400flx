@@ -3,8 +3,9 @@ import socket
 import sys
 import struct
 import types
+import builtins
 
-USBIP_VERSION = 273 # 273 for the unsigned patched driver and 262 for the old signed driver
+USBIP_VERSION = builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
 
 def rev(u):
     return (((u>>8) | (u<<8)) &0xFFFF)
@@ -79,8 +80,6 @@ class USBIPHeader(BaseStucture):
         ('command', 'H'),
         ('status', 'I')
     ]
-
-
 
 class USBInterface(BaseStucture):
     _fields_ = [
@@ -251,13 +250,10 @@ class EndPoint(BaseStucture):
         ('bInterval', 'B', 0x0A)
     ]
 
-
-
 class USBRequest():
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
-
 
 class USBDevice(object):
     '''interfaces = [USBInterface(bInterfaceClass=0x3, bInterfaceSubClass=0x0, bInterfaceProtocol=0x0)]

@@ -1,9 +1,9 @@
 from __future__ import print_function
+import builtins
 import atexit
 import datetime
 import struct
 from time import sleep,time
-from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest, USBIP_VERSION
 import sys
 import threading
 import getopt
@@ -14,25 +14,6 @@ import ctypes, sys, os
 import uninstall
 import signal
 
-def is_admin():
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-if USBIP_VERSION == 262 and not is_admin():
-    def u(z):
-        if sys.version_info[0] >= 3:
-            return z
-        else:
-            return unicode(z)
-    args = u(__file__)
-    if len(sys.argv) >= 2:
-        args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
-    print(args)
-    ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
-    sys.exit(0)
-    
 sensitivity = b'S' # Standard/Cubic
 running = True
 joystick = False
@@ -51,6 +32,77 @@ forceVendorID = None
 forceProductID = None
 usbip = "usbip.exe"
 event = threading.Event()
+
+builtins.USBIP_VERSION = 273 # 273 for the unsigned patched driver and 262 for the old signed driver
+
+opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["usbip-directory=", "max", "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
+i = 0
+while i < len(opts):
+    opt,arg = opts[i]
+    if opt in ('-h', '--help'):
+        print("""python 3d.py [options]\n
+-h --help             this information
+-j --joystick         HID joystick mode 
+-l --list-ports       list serial ports
+-c --cubic            cubic sensitivity mode
+-mMAX --max=MAX       set maximum value for all axes
+-VVID --vendor=VID    force vendor ID
+-PPID --product=PID   force product ID
+-pCOMx | --port=COMx         COM port of SpaceBall 4000
+-ddesc | --description=desc  description of COM port device starts with desc""")
+        sys.exit(0)
+    elif opt in ('-j', '--joystick'):
+        joystick = True
+    elif opt in ('-p', '--port'):
+        port = arg
+        description = None
+    elif opt in ('-l', '--list-ports'):
+        for p in serial.tools.list_ports.comports():
+            print(p.device+": "+p.description)
+        sys.exit(0)
+    elif opt in ('-d', '--description'):
+        port = None
+        description = arg
+    elif opt in ('-c', '--cubic-mode'):
+        sensitivity = b'S'
+    elif opt in ('-V', '--vendor'):
+        forceVendorID = int(arg, 16)
+    elif opt in ('-P', '--product'):
+        forceProductID = int(arg, 16)        
+    elif opt in ('-m', '--max'):
+        trimValue = int(arg)
+    elif opt in ('-u', '--usbip-exe'):
+        if arg[-1] == '/' or arg[-1] == ':':
+            usbip = arg + "usbip.exe"
+        elif arg[-1] == '':
+            usbip = "usbip.exe"
+        else:
+            usbip = arg + "/" + "usbip.exe"
+    i += 1
+
+u = subprocess.Popen([usbip, "-v"], stdout=subprocess.PIPE)
+builtins.USBIP_VERSION = 273 if u.stdout.readline().startswith(b"usbip for windows") else 262
+
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+if builtins.USBIP_VERSION == 262 and not is_admin():
+    def u(z):
+        if sys.version_info[0] >= 3:
+            return z
+        else:
+            return unicode(z)
+    args = u(__file__)
+    if len(sys.argv) >= 2:
+        args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
+    print(args)
+    ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
+    sys.exit(0)
+    
+from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest    
 
 def trim(x):
     if x&0x8000:
@@ -102,50 +154,6 @@ def persistentRead():
         except Exception as e:
             print(str(e))
 
-opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["usbip-directory=", "max", "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
-i = 0
-while i < len(opts):
-    opt,arg = opts[i]
-    if opt in ('-h', '--help'):
-        print("""python 3d.py [options]\n
--h --help             this information
--j --joystick         HID joystick mode 
--l --list-ports       list serial ports
--c --cubic            cubic sensitivity mode
--mMAX --max=MAX       set maximum value for all axes
--VVID --vendor=VID    force vendor ID
--PPID --product=PID   force product ID
--pCOMx | --port=COMx         COM port of SpaceBall 4000
--ddesc | --description=desc  description of COM port device starts with desc""")
-        sys.exit(0)
-    elif opt in ('-j', '--joystick'):
-        joystick = True
-    elif opt in ('-p', '--port'):
-        port = arg
-        description = None
-    elif opt in ('-l', '--list-ports'):
-        for p in serial.tools.list_ports.comports():
-            print(p.device+": "+p.description)
-        sys.exit(0)
-    elif opt in ('-d', '--description'):
-        port = None
-        description = arg
-    elif opt in ('-c', '--cubic-mode'):
-        sensitivity = b'S'
-    elif opt in ('-V', '--vendor'):
-        forceVendorID = int(arg, 16)
-    elif opt in ('-P', '--product'):
-        forceProductID = int(arg, 16)        
-    elif opt in ('-m', '--max'):
-        trimValue = int(arg)
-    elif opt in ('-u', '--usbip-exe'):
-        if arg[-1] == '/' or arg[-1] == ':':
-            usbip = arg + "usbip.exe"
-        elif arg[-1] == '':
-            usbip = "usbip.exe"
-        else:
-            usbip = arg + "/" + "usbip.exe"
-    i += 1
 
 # HID Configuration
 
@@ -405,7 +413,7 @@ def exitFunction():
     if running:
         print("Exiting...")
         running = False
-        if USBIP_VERSION == 262:
+        if builtins.USBIP_VERSION == 262:
             uninstallDriver()
         sys.exit(0)
 
