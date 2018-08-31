@@ -1,15 +1,11 @@
-USB Emulation In Python With No Additional Hardware
-=============
+This code uses the USB/IP project: http://usbip.sourceforge.net/ to pretend that an
+serial SpaceBall 4000 FLX is actually a USB-HID based SpacePilot Pro (for use with the
+official 3dxware drivers) or else that it is a standard six-axis joystick.
 
-More details on: <br>
-http://breaking-the-system.blogspot.com/2014/08/emulating-usb-devices-in-python-with-no.html <br>
-
-This code uses the USB/IP project: http://usbip.sourceforge.net/ to emulate usb devices. <br>
-In this example I showed how to emulate HID mouse device. <br>
-This code can be easily changed to support any usb device. <br>
-This code is very experimental, use with care. <br>
-In the HID example there is a bug with USB/IP driver that causes blue screen on de-attach: <br>
-http://sourceforge.net/p/usbip/discussion/418507/thread/7ff86875/?page=0 <br>
-It doesnt happen with other devices I tested. <br>
-
+You have two choices: You can use the official signed usbip release. If you do that, you run
+the danger of a blue-screen if you detach without first deleting the driver. When using the
+official signed usbip release, 3d.py re-launches in administrator mode, and then deletes the
+driver before detaching IF you detach by pressing ctrl-c. If you use the unsigned usbip release
+(https://sourceforge.net/p/usbip/discussion/418507/thread/86c5e473/) you won't have such
+problems, but installation will be more complicated.
 
