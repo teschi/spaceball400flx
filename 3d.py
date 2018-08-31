@@ -90,18 +90,23 @@ def is_admin():
     except:
         return False
 
-if builtins.USBIP_VERSION == 262 and not is_admin():
-    def u(z):
-        if sys.version_info[0] >= 3:
-            return z
-        else:
-            return unicode(z)
-    args = u(__file__)
-    if len(sys.argv) >= 2:
-        args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
-    print(args)
-    ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
-    sys.exit(0)
+if builtins.USBIP_VERSION == 262:
+    import platform
+    if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
+        print("With the signed driver on Windows x64, please use a 64-bit Python interpreter.")
+        exit(1)
+    if not is_admin():
+        def u(z):
+            if sys.version_info[0] >= 3:
+                return z
+            else:
+                return unicode(z)
+        print("Relaunching as administrator.\nPlease make sure that to terminate the launched process you use ctrl-c in its window.")
+        args = u(__file__)
+        if len(sys.argv) >= 2:
+            args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
+        ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
+        sys.exit(0)
     
 from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest    
 
@@ -416,6 +421,7 @@ def exitFunction():
         running = False
         if builtins.USBIP_VERSION == 262:
             uninstallDriver()
+        usbip_process.kill()
         sys.exit(0)
 
 atexit.register(exitFunction)
