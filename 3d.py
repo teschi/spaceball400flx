@@ -421,7 +421,6 @@ def exitFunction():
         running = False
         if builtins.USBIP_VERSION == 262:
             uninstallDriver()
-        usbip_process.kill()
         sys.exit(0)
 
 atexit.register(exitFunction)
