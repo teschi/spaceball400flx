@@ -82,6 +82,7 @@ while i < len(opts):
 
 u = subprocess.Popen([usbip, "-v"], stdout=subprocess.PIPE)
 builtins.USBIP_VERSION = 273 if u.stdout.readline().startswith(b"usbip for windows") else 262
+u.stdout.close()
 
 def is_admin():
     try:
