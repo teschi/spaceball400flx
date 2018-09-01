@@ -14,6 +14,8 @@ import ctypes, sys, os
 import uninstall
 import signal
 
+COMMAND_TIMEOUT = 2
+TIMEOUT = 5
 noLaunch = False
 noAdmin = False
 sensitivity = b'S' # Standard/Cubic
@@ -125,25 +127,62 @@ def trim(x):
         if x > trimValue:
             return trimValue
     return x        
-
+    
+def haveResponse(r):
+    t0 = time()
+    while time() < t0+COMMAND_TIMEOUT:
+        conn.timeout = COMMAND_TIMEOUT
+        line = conn.read_until(b'\r', len(r)+1)
+        conn.timeout = TIMEOUT
+        if line == r + b'\r':
+            return True
+    return False
+            
+def confirmWrite(out, confirmation=None):
+    if confirmation is None:
+        confirmation = out
+    for i in range(3):
+        conn.reset_input_buffer()
+        conn.write(out+b'\r')
+        if haveResponse(confirmation):
+            print("Confirmed command "+out.decode())
+            return
+    raise serial.SerialException("Cannot confirm "+out.decode())
+    
 def persistentOpen():
     global conn,running
-    while running:
+    conn = None
+    while running and conn is None:
         try:
             if port is not None:
                 print("Opening "+port)
-                c = serial.Serial(port=port,baudrate=9600,timeout=5)
+                conn = serial.Serial(port=port,baudrate=9600,timeout=TIMEOUT)
                 print("Opened")
-                return c
-            for p in serial.tools.list_ports.comports():
-                if p.description.lower().startswith(description.lower()):
-                    print("Opening "+str(p))
-                    c = serial.Serial(port=p.device,baudrate=9600)
-                    print("Opened")
-                    return c
+            else:
+                for p in serial.tools.list_ports.comports():
+                    if p.description.lower().startswith(description.lower()):
+                        print("Opening "+str(p))
+                        conn = serial.Serial(port=p.device,baudrate=9600,timeout=TIMEOUT)
+                        print("Opened")
+                        break
+            if conn is not None:
+                sleep(1)
+                conn.reset_input_buffer()
+                print("Init")
+                confirmWrite(b"P20")
+                confirmWrite(b"Y"+sensitivity)
+                confirmWrite(b"A271006", b"a271006E")
+                confirmWrite(b"M")
+                return
             sleep(0.5)
         except serial.SerialException as e:
             print("Error "+str(e))
+            if conn is not None:
+                try:
+                    conn.close()
+                except:
+                    pass
+            conn = None
             sleep(0.5)
 
 def persistentRead():
@@ -163,7 +202,7 @@ def persistentRead():
                 pass
             conn = None
             sleep(0.5)
-            conn = persistentOpen()
+            persistentOpen()
         except Exception as e:
             print(str(e))
 
@@ -323,26 +362,12 @@ usb_Dev = USBHID()
 usb_container = USBContainer()
 usb_container.add_usb_device(usb_Dev)  # Supports only one device!
           
-def init():
-    if conn is None:
-        print("not connected")
-        return
-        
-    try:
-        print("Init")
-        conn.write(b"P20\rY" + sensitivity + b"\rAE\rA271006\rM\r") # update period 32ms, sensitivity Standard (vs. Cubic), auto-rezero Enable (D to disable), auto-rezero after 10,000 ms assuming 6 movement units
-    except serial.SerialException:
-        print("Failed init")
-        
-reinit = time()
-
 def get16(data,offset):
     return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
 
 def processData(data):
-    global reinit,buttons,xyz,rxyz,newXYZ,newRXYZ,newButtons,lock,event
+    global buttons,xyz,rxyz,newXYZ,newRXYZ,newButtons,lock,event
     if len(data) == 15 and data[0] == ord(b'D'):
-        reinit = time()
         lock.acquire()
         if joystick:
             xyz[0] = get16(data, 3);
@@ -375,8 +400,7 @@ def serialLoop():
     overflow = False
     buffer = bytearray()
     escape = False
-    conn = persistentOpen()
-    init()
+    persistentOpen()
     while running:
         c = persistentRead()
         if c == b'\r':
@@ -397,16 +421,6 @@ def serialLoop():
         else:
             overflow = True
 
-def reconnectionLoop():
-    global running
-    while running:
-        delta = time() - reinit
-        if delta >= 5:
-            init()
-        else:
-            sleep(5.01-delta)
-        sleep(1)
-        
 def uninstallDriver():
     if uninstall.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
         print("Success uninstalling driver")
@@ -417,9 +431,6 @@ def uninstallDriver():
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
 t1.start()
-t2 = threading.Thread(target=reconnectionLoop)
-t2.daemon = True
-t2.start()
 
 def exitFunction():
     global running
