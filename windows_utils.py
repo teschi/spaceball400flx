@@ -10,6 +10,8 @@ from __future__ import absolute_import
 # pylint: disable=invalid-name,too-few-public-methods
 import re
 import ctypes
+import platform
+import msvcrt
 from ctypes.wintypes import BOOL
 from ctypes.wintypes import HWND
 from ctypes.wintypes import DWORD
@@ -19,10 +21,29 @@ from ctypes.wintypes import ULONG
 from ctypes.wintypes import HKEY
 from ctypes.wintypes import BYTE
 from ctypes.wintypes import UINT
+from ctypes.wintypes import WCHAR
+from ctypes.wintypes import CHAR
+from ctypes.wintypes import HANDLE
+from ctypes.wintypes import LPVOID
 import serial
 from serial.win32 import ULONG_PTR
 from serial.tools import list_ports_common
 
+FILE_DEVICE_BUS_EXTENDER = 0x0000002a
+METHOD_BUFFERED = 0
+FILE_READ_DATA = 1
+FILE_WRITE_DATA = 2
+
+def CTL_CODE(DeviceType, Function, Method, Access): 
+    return (DeviceType << 16) | (Access << 14) | (Function << 2) | Method
+
+def USBVBUS_IOCTL(index):
+    return CTL_CODE (FILE_DEVICE_BUS_EXTENDER, index, METHOD_BUFFERED, FILE_READ_DATA)
+
+IOCTL_USBVBUS_PLUGIN_HARDWARE = USBVBUS_IOCTL (0x0)
+IOCTL_USBVBUS_UNPLUG_HARDWARE = USBVBUS_IOCTL (0x1)
+IOCTL_USBVBUS_EJECT_HARDWARE = USBVBUS_IOCTL (0x2)
+IOCTL_USBVBUS_GET_PORTS_STATUS = USBVBUS_IOCTL (0x3)
 
 def ValidHandle(value, func, arguments):
     if value == 0:
@@ -31,6 +52,7 @@ def ValidHandle(value, func, arguments):
 
 
 NULL = 0
+LPOVERLAPPED = LPVOID
 HDEVINFO = ctypes.c_void_p
 LPCTSTR = ctypes.c_wchar_p
 PCTSTR = ctypes.c_wchar_p
@@ -56,8 +78,8 @@ class GUID(ctypes.Structure):
             self.Data1,
             self.Data2,
             self.Data3,
-            ''.join(["{:02x}".format(d) for d in self.Data4[:2]]),
-            ''.join(["{:02x}".format(d) for d in self.Data4[2:]]),
+            ''.join(["{:02x}".format(d&0xFF) for d in self.Data4[:2]]),
+            ''.join(["{:02x}".format(d&0xFF) for d in self.Data4[2:]]),
         )
 
 
@@ -72,15 +94,51 @@ class SP_DEVINFO_DATA(ctypes.Structure):
     def __str__(self):
         return "ClassGuid:{} DevInst:{}".format(self.ClassGuid, self.DevInst)
 
+class ioctl_usbvbus_get_ports_status(ctypes.Structure):
+    _fields_ = [
+        ('portStatus', CHAR*128)
+    ]
 
+class SP_DEVICE_INTERFACE_DATA(ctypes.Structure):
+    _fields_ = [
+        ('cbSize', DWORD),
+        ('InterfaceClassGuid', GUID),
+        ('Flags', DWORD),
+        ('Reserved', ULONG_PTR),
+    ]
+    def __str__(self):
+        return "InterfaceClassGuid:%s Flags:%s" % (self.InterfaceClassGuid, self.Flags)
+
+PSP_DEVICE_INTERFACE_DATA = ctypes.POINTER(SP_DEVICE_INTERFACE_DATA)
 PSP_DEVINFO_DATA = ctypes.POINTER(SP_DEVINFO_DATA)
 
 PSP_DEVICE_INTERFACE_DETAIL_DATA = ctypes.c_void_p
 
+DeviceIoControl = ctypes.windll.kernel32.DeviceIoControl
+
+DeviceIoControl.argtypes = [
+        HANDLE,                    # _In_          HANDLE hDevice
+        DWORD,                     # _In_          DWORD dwIoControlCode
+        LPVOID,                    # _In_opt_      LPVOID lpInBuffer
+        DWORD,                     # _In_          DWORD nInBufferSize
+        LPVOID,                    # _Out_opt_     LPVOID lpOutBuffer
+        DWORD,                     # _In_          DWORD nOutBufferSize
+        LPDWORD,                            # _Out_opt_     LPDWORD lpBytesReturned
+        LPOVERLAPPED]                       # _Inout_opt_   LPOVERLAPPED lpOverlapped
+DeviceIoControl.restype = BOOL
+    
 setupapi = ctypes.windll.LoadLibrary("setupapi")
 SetupDiDestroyDeviceInfoList = setupapi.SetupDiDestroyDeviceInfoList
 SetupDiDestroyDeviceInfoList.argtypes = [HDEVINFO]
 SetupDiDestroyDeviceInfoList.restype = BOOL
+
+SetupDiEnumDeviceInterfaces = ctypes.windll.setupapi.SetupDiEnumDeviceInterfaces
+SetupDiEnumDeviceInterfaces.argtypes = [HDEVINFO, PSP_DEVINFO_DATA, ctypes.POINTER(GUID), DWORD, PSP_DEVICE_INTERFACE_DATA]
+SetupDiEnumDeviceInterfaces.restype = BOOL
+
+SetupDiGetDeviceInterfaceDetail = ctypes.windll.setupapi.SetupDiGetDeviceInterfaceDetailW
+SetupDiGetDeviceInterfaceDetail.argtypes = [HDEVINFO, PSP_DEVICE_INTERFACE_DATA, PSP_DEVICE_INTERFACE_DETAIL_DATA, DWORD, PDWORD, PSP_DEVINFO_DATA]
+SetupDiGetDeviceInterfaceDetail.restype = BOOL
 
 SetupDiClassGuidsFromName = setupapi.SetupDiClassGuidsFromNameW
 SetupDiClassGuidsFromName.argtypes = [PCTSTR, ctypes.POINTER(GUID), DWORD, PDWORD]
@@ -138,7 +196,7 @@ def uninstallUSBHID(vendorID,productID):
             ctypes.sizeof(GUIDs),
             ctypes.byref(guids_size)):
         raise ctypes.WinError()
-
+        
     # repeat for all possible GUIDs
     for index in range(guids_size.value):
         bInterfaceNumber = None
@@ -150,9 +208,10 @@ def uninstallUSBHID(vendorID,productID):
 
         devinfo = SP_DEVINFO_DATA()
         devinfo.cbSize = ctypes.sizeof(devinfo)
-        index = 0
-        while SetupDiEnumDeviceInfo(g_hdi, index, ctypes.byref(devinfo)):
-            index += 1
+        
+        i = 0
+        while SetupDiEnumDeviceInfo(g_hdi, i, ctypes.byref(devinfo)):
+            i += 1
 
             # hardware ID
             szHardwareID = ctypes.create_unicode_buffer(250)
@@ -185,6 +244,80 @@ def uninstallUSBHID(vendorID,productID):
         SetupDiDestroyDeviceInfoList(g_hdi)
     return uninstalled and not error
 
+class VBUSException(Exception):
+    pass
+    
+def getVBUSNodeName():
+    err = VBUSException("It looks like the USBIP driver is not installed")
+    guid = GUID(Data1=0xD35F7840, Data2=0x6A0C, Data3=0x11d2, Data4=(0xB8, 0x41, 0x00, 0xC0, 0x4F, 0xAD, 0x51, 0x71))
+    g_hdi = SetupDiGetClassDevs(
+        ctypes.byref(guid),
+        None,
+        NULL,
+        DIGCF_PRESENT|DIGCF_DEVICEINTERFACE) 
+    if g_hdi == -1:
+        raise err
+
+    interfaceData = SP_DEVICE_INTERFACE_DATA()
+    interfaceData.cbSize = ctypes.sizeof(interfaceData)
+    
+    if not SetupDiEnumDeviceInterfaces(g_hdi,
+        None, 
+        ctypes.byref(guid),
+        0, 
+        ctypes.byref(interfaceData)):
+        raise err
+        
+    needed = DWORD()
+
+    if ( not SetupDiGetDeviceInterfaceDetail(g_hdi,
+        ctypes.byref(interfaceData),
+        None,
+        0,
+        ctypes.byref(needed),
+        None) and ctypes.GetLastError() != 122 ):
+        raise err
+        
+    class SP_DEVICE_INTERFACE_DETAIL_DATA_CURRENT(ctypes.Structure):
+            _fields_ = [
+                ('cbSize', DWORD),
+                ('DevicePath', WCHAR*(needed.value - ctypes.sizeof(DWORD))),
+            ]
+
+    detail = SP_DEVICE_INTERFACE_DETAIL_DATA_CURRENT()
+    detail.cbSize = 8 if platform.architecture()[0] == '64bit' else 6
+    
+    devInfo = SP_DEVINFO_DATA()
+    devInfo.cbSize = ctypes.sizeof(devInfo)
+
+    if not SetupDiGetDeviceInterfaceDetail(g_hdi,
+        ctypes.byref(interfaceData),
+        ctypes.byref(detail),
+        needed,
+        ctypes.byref(needed),
+        None):
+        raise err
+        
+    return detail.DevicePath
+    
+def vbusGetPortsStatus(file):
+    class STATUS_BUFFER(ctypes.Structure):
+            _fields_ = [
+                ('Buffer', BYTE*128),
+            ]
+    buf = STATUS_BUFFER()
+    len = DWORD(0)
+    if DeviceIoControl(msvcrt.get_osfhandle(file.fileno()), IOCTL_USBVBUS_GET_PORTS_STATUS, None, 0, ctypes.byref(buf), ctypes.sizeof(buf), ctypes.byref(len), None):
+        return tuple(x&0xFF for x in buf.Buffer)
+    else:
+        raise VBUSException("Cannot get VBUS port statuses")
+        
+def vbusGetFreePort(file):
+    statuses = vbusGetPortsStatus(file)
+    for i in range(1,128):
+        if not statuses[i]:
+            return i
+    raise VBUSException("All VBUS ports in use")
 
 def comports(include_links=False):
     """Return a list of info objects about serial ports"""
@@ -193,4 +326,8 @@ def comports(include_links=False):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # test
 if __name__ == '__main__':
-    print(uninstallUSBHID(0x46d,0xc62b))
+    #uninstallUSBHID(0x46d,0xc62b)
+    name = getVBUSNodeName()
+    f = open(name, "w+b")
+    print(vbusGetPortsStatus(f))
+    

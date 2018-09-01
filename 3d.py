@@ -11,7 +11,7 @@ import serial
 import serial.tools.list_ports
 import subprocess
 import ctypes, sys, os
-import uninstall
+import windows_utils
 import signal
 
 COMMAND_TIMEOUT = 2
@@ -422,7 +422,7 @@ def serialLoop():
             overflow = True
 
 def uninstallDriver():
-    if uninstall.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
+    if windows_utils.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
         print("Success uninstalling driver")
     else:
         print("Failure uninstalling driver")

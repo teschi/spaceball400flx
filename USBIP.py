@@ -4,8 +4,50 @@ import sys
 import struct
 import types
 import builtins
-
+import os
+if os.name == 'nt':
+    import windows_utils
+    
 USBIP_VERSION = builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
+
+class CommunicationChannel(object):
+    def __init__(self, filename=None, ip=None, port=None):
+        if filename:
+            self.file = open(filename, "w+b")
+            self.socket = None
+        else:
+            self.file = None
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.socket.bind((ip, port))
+            self.socket.listen(5)
+            
+    def read(self,n):
+        if self.file:
+            return self.file.read(n)
+        else:
+            return self.conn.recv(n)
+            
+    def write(self,data):
+        if self.file:
+            self.file.write(data)
+        else:
+            self.conn.sendall(data)
+            
+    def acceptConnection(self):
+        if self.socket:
+            self.conn, addr = self.socket.accept()
+            print("Connected",addr)
+            
+    def closeConnection(self):
+        if self.socket:
+            self.conn.close()
+            
+    def close(self):
+        if self.file:
+            self.file.close()
+        else:
+            self.conn.close()
 
 def rev(u):
     return (((u>>8) | (u<<8)) &0xFFFF)
@@ -280,7 +322,7 @@ class USBDevice(object):
         self.all_configurations = str
 
     def send_usb_req(self, usb_req, usb_res, status=0):
-        self.connection.sendall(USBIPRETSubmit(command=0x3,
+        self.connection.write(USBIPRETSubmit(command=0x3,
                                                    seqnum=usb_req.seqnum,
                                                    ep=0,
                                                    status=status,
@@ -375,20 +417,31 @@ class USBContainer(object):
                                                     bInterfaceSubClass=usb_dev.configurations[0].interfaces[0].bInterfaceSubClass,
                                                     bInterfaceProtocol=usb_dev.configurations[0].interfaces[0].bInterfaceProtocol))
 
+    def read(n):
+        if self.file:
+            return self.file.read(n)
+        else:
+            return self.conn.recv(n)
+            
+    def write(data):
+        if self.file:
+            return self.file.write(data)
+        else:
+            return self.conn.write(data)
 
-    def run(self, ip='0.0.0.0', port=3240):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((ip, port))
-        s.listen(5)
+    def run(self, ip='0.0.0.0', port=3240, forceIP=True):
+        self.ipMode = not forceIP and os.name == 'nt'
+        if self.ipMode:
+            self.channel = CommunicationChannel(filename=windows_utils.getVBUSNodeName()) ## TODO: error handling
+        else:
+            self.channel = CommunicationChannel(ip=ip, port=port)
         attached = False
         while 1:
-            conn, addr = s.accept()
-            print('Connection address:', addr)
+            self.channel.acceptConnection()
             req = USBIPHeader()
             while 1:
                 if not attached:
-                    data = conn.recv(8)
+                    data = self.channel.read(8)
                     if not data:
                         break
                     req.unpack(data)
@@ -396,15 +449,15 @@ class USBContainer(object):
                     print('command:', hex(req.command))
                     if req.command == 0x8005:
                         print('list of devices')
-                        conn.sendall(self.handle_device_list().pack())
+                        self.channel.write(self.handle_device_list().pack())
                     elif req.command == 0x8003:
                         print('attach device')
-                        conn.recv(32)  # receive bus id
-                        conn.sendall(self.handle_attach().pack())
+                        self.channel.read(32)  # receive bus id
+                        self.channel.write(self.handle_attach().pack())
                         attached = True
                 else:
                     cmd = USBIPCMDSubmit()
-                    data = conn.recv(cmd.size())
+                    data = self.channel.read(cmd.size())
                     cmd.unpack(data)
                     usb_req = USBRequest(seqnum=cmd.seqnum,
                                          devid=cmd.devid,
@@ -415,6 +468,6 @@ class USBContainer(object):
                                          interval=cmd.interval,
                                          setup=cmd.setup,
                                          data=data)
-                    self.usb_devices[0].connection = conn
+                    self.usb_devices[0].connection = self.channel
                     self.usb_devices[0].handle_usb_request(usb_req)
-            conn.close()
+            self.channel.closeConnection()
