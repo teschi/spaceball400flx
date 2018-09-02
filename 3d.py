@@ -11,7 +11,9 @@ import serial
 import serial.tools.list_ports
 import subprocess
 import ctypes, sys, os
-import windows_utils
+if os.name == 'nt':
+    import msvcrt
+    import windows_utils
 import signal
 
 COMMAND_TIMEOUT = 2
@@ -34,12 +36,12 @@ newRXYZ = False
 trimValue = 32768
 forceVendorID = None
 forceProductID = None
-usbip = "usbip.exe"
+usbip = None if os.name == 'nt' else "usbip"
 event = threading.Event()
 
-builtins.USBIP_VERSION = 273 # 273 for the unsigned patched driver and 262 for the old signed driver
+builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
 
-opts, args = getopt.getopt(sys.argv[1:], "u:m:P:V:chljp:d:", ["no-admin", "no-launch", "usbip-directory=", "max", 
+opts, args = getopt.getopt(sys.argv[1:], "nu:m:P:V:chljp:d:", ["no-admin", "new-driver", "no-launch", "usbip-directory=", "max", 
                     "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
@@ -50,6 +52,7 @@ while i < len(opts):
 -j --joystick         HID joystick mode 
 -l --list-ports       list serial ports
 -c --cubic            cubic sensitivity mode
+-n --new-driver       new patched driver
 -mMAX --max=MAX       set maximum value for all axes
 -VVID --vendor=VID    force vendor ID
 -PPID --product=PID   force product ID
@@ -78,20 +81,28 @@ while i < len(opts):
         trimValue = int(arg)
     elif opt in ('-u', '--usbip-exe'):
         if arg[-1] == '/' or arg[-1] == ':':
-            usbip = arg + "usbip.exe"
+            usbip = arg + "usbip"
         elif arg[-1] == '':
-            usbip = "usbip.exe"
+            usbip = "usbip"
         else:
-            usbip = arg + "/" + "usbip.exe"
+            usbip = arg + "/" + "usbip"
+        if os.name == 'nt':
+            usbip += ".exe"
     elif opt in ('--no-admin',):
         noAdmin = True
     elif opt in ('--no-launch',):
         noLaunch = True
+    elif opt in ('-n', '--new-driver'):
+        builtins.USBIP_VERSION = 273
     i += 1
 
-u = subprocess.Popen([usbip, "-v"], stdout=subprocess.PIPE)
-builtins.USBIP_VERSION = 273 if u.stdout.readline().startswith(b"usbip for windows") else 262
-u.stdout.close()
+if not builtins.USBIP_VERSION:
+    if usbip and os.name == 'nt' and not builtins.USBIP_VERSION:
+        u = subprocess.Popen([usbip, "-v"], stdout=subprocess.PIPE)
+        builtins.USBIP_VERSION = 273 if u.stdout.readline().startswith(b"usbip for windows") else 262
+        u.stdout.close()
+    else:
+        builtins.USBIP_VERSION = 262
 
 def is_admin():
     try:
@@ -99,7 +110,8 @@ def is_admin():
     except:
         return False
 
-if builtins.USBIP_VERSION == 262 and not noAdmin:
+print("Assuming protocol",builtins.USBIP_VERSION)
+if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
     import platform
     if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
         print("With the signed driver on Windows x64, please use a 64-bit Python interpreter.")
@@ -422,11 +434,12 @@ def serialLoop():
             overflow = True
 
 def uninstallDriver():
-    if windows_utils.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
-        print("Success uninstalling driver")
-    else:
-        print("Failure uninstalling driver")
-        sleep(10)
+    if os.name=='nt':
+        if windows_utils.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
+            print("Success uninstalling driver")
+        else:
+            print("Failure uninstalling driver")
+            sleep(10)
 
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
@@ -437,18 +450,23 @@ def exitFunction():
     if running:
         print("Exiting...")
         running = False
-        if builtins.USBIP_VERSION == 262:
+        if os.name == 'nt' and builtins.USBIP_VERSION == 262:
             uninstallDriver()
+        usb_container.detach()
         sys.exit(0)
 
 atexit.register(exitFunction)
 
-signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
+if os.name=='nt':
+    signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
 signal.signal(signal.SIGINT, lambda x,y: exitFunction())
 
-if not noLaunch:
+if usbip and not noLaunch:
     print("Starting "+usbip)
-    subprocess.Popen([usbip, "-a", "localhost", "1-1"],creationflags=0x00000200)
+    if os.name=='nt':
+        subprocess.Popen([usbip, "-a", "localhost", "1-1"],creationflags=0x00000200)
+    else:
+        subprocess.Popen([usbip, "-a", "localhost", "1-1"])
     print("Press ctrl-c to exit")
 
-usb_container.run()
+usb_container.run(forceIP=usbip is not None)

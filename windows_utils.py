@@ -358,14 +358,13 @@ def vbusGetFreePort(vbus):
 def vbusAttach(vbus, plugin):
     plugin.addr = vbusGetFreePort(vbus)
     unused = ULONG(0)
-    print(ctypes.sizeof(plugin))
     if DeviceIoControl(vbus, IOCTL_USBVBUS_PLUGIN_HARDWARE, ctypes.byref(plugin), ctypes.sizeof(plugin), None, 0, ctypes.byref(unused), None):
         return plugin.addr
     else:
         raise VBUSException("Error attaching, error number = "+str(ctypes.GetLastError()))
         
-def vbusDetach(vbus, addr, vendorID, productID):
-    uninstallUSBHID(vendorID, productID) ## don't need to do this with version 272
+def vbusDetach(vbus, addr): #, vendorID, productID):
+    #uninstallUSBHID(vendorID, productID) ## don't need to do this with version 272
     if addr is not None:
         unplug = ioctl_usbvbus_unplug(addr=addr)
         unused = ULONG(0)
