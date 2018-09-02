@@ -162,7 +162,7 @@ SetupDiDestroyDeviceInfoList.restype = BOOL
 
 CtrlHandlerRoutine = WINFUNCTYPE(BOOL, DWORD)        
 SetConsoleCtrlHandler = ctypes.windll.kernel32.SetConsoleCtrlHandler
-SetConsoleCtrlHandler.argtypes = (CtrlHandlerRoutine, BOOL)
+#SetConsoleCtrlHandler.argtypes = (CtrlHandlerRoutine, BOOL)
 SetConsoleCtrlHandler.restype = BOOL
 
 SetupDiEnumDeviceInterfaces = ctypes.windll.setupapi.SetupDiEnumDeviceInterfaces

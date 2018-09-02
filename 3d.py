@@ -14,6 +14,7 @@ import ctypes, sys, os
 if os.name == 'nt':
     import msvcrt
     import windows_utils
+    from ctypes.wintypes import BOOL
 import signal
 
 COMMAND_TIMEOUT = 2
@@ -461,6 +462,7 @@ def windowsExit():
     if not stopped:
         stopped = True
         print("Exiting...")
+        windows_utils.SetConsoleCtrlHandler(None, BOOL(True))
         if not sentReport:
             print("Waiting for report descriptor to be sent first")
             t = time()
@@ -474,17 +476,18 @@ def windowsExit():
             
         running = False
         usb_container.running = False
-        if os.name == 'nt' and builtins.USBIP_VERSION == 262:
+        if builtins.USBIP_VERSION == 262:
             uninstallDriver()
         else:
             usb_container.detach()
         print("Bye")
         windows_utils.ExitProcess(0)
-    return False
+        return False
+    return True
     
 if os.name=='nt':
     breakHandler = windows_utils.CtrlHandlerRoutine(lambda x: windowsExit())
-    windows_utils.SetConsoleCtrlHandler(breakHandler, True)
+    windows_utils.SetConsoleCtrlHandler(breakHandler, BOOL(True))
     signal.signal(signal.SIGBREAK, lambda x,y: windowsExit)
     signal.signal(signal.SIGINT, lambda x,y: windowsExit)
     atexit.register(lambda: windowsExit())
@@ -498,3 +501,7 @@ if usbip and not noLaunch:
     print("Press ctrl-c to exit")
 
 usb_container.run(forceIP=usbip is not None)
+
+if os.name=='nt':
+    windowsExit()
+    
