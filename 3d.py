@@ -219,6 +219,7 @@ def persistentRead():
             persistentOpen()
         except Exception as e:
             print(str(e))
+    return None
 
 
 # HID Configuration
@@ -361,11 +362,13 @@ class USBHID(USBDevice):
         self.send_usb_req(usb_req, return_val, status=(0 if return_val else 1))
 
     def handle_unknown_control(self, control_req, usb_req):
+        global sentReport
         if control_req.bmRequestType == 0x81:
             if control_req.bRequest == 0x6:  # Get Descriptor
                 if control_req.wValue == 0x22:  # send initial report
                     print('send report descriptor')
                     self.send_usb_req(usb_req, self.generate_hid_report())
+                    sentReport = True
 
         if control_req.bmRequestType == 0x21:  # Host Request
             if control_req.bRequest == 0x0a:  # set idle
@@ -417,6 +420,8 @@ def serialLoop():
     persistentOpen()
     while running:
         c = persistentRead()
+        if not running:
+            break
         if c == b'\r':
             if len(buffer):
                 processData(buffer)
@@ -448,11 +453,26 @@ t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
 t1.start()
 
+sentReport = False
+stopped = False
+
 def windowsExit():
-    global running
-    if running:
-        running = False
+    global stopped,running,sentReport
+    if not stopped:
+        stopped = True
         print("Exiting...")
+        if not sentReport:
+            print("Waiting for report descriptor to be sent first")
+            t = time()
+            while time() < t + 15 and not sentReport:
+                sleep(1)
+            if sentReport:
+                print("Ready to uninstall")
+            sleep(1)
+            if not sentReport:
+                print("Report still not sent. There may be some difficulties in disconnecting.")
+            
+        running = False
         usb_container.running = False
         if os.name == 'nt' and builtins.USBIP_VERSION == 262:
             uninstallDriver()
