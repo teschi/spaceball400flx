@@ -129,9 +129,9 @@ if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
         ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
         sys.exit(0)
         
-if os.name == 'nt' and builtins.USBIP_VERSION == 262:
-    windows_utils.disableClose()
-    
+#if os.name == 'nt' and builtins.USBIP_VERSION == 262:
+#    windows_utils.disableClose()
+#    
 from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest    
 
 def trim(x):
@@ -440,6 +440,7 @@ def uninstallDriver():
     if os.name=='nt':
         if windows_utils.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
             print("Success uninstalling driver")
+            sleep(1)
         else:
             print("Failure uninstalling driver")
             sleep(10)
@@ -452,17 +453,24 @@ def exitFunction():
     global running
     if running:
         print("Exiting...")
+        sleep(1)
         running = False
+        usb_container.running = False
         if os.name == 'nt' and builtins.USBIP_VERSION == 262:
             uninstallDriver()
-        usb_container.detach()
-        sys.exit(0)
+        else:
+            usb_container.detach()
+        print("Bye")
+    return False
 
-atexit.register(exitFunction)
+#atexit.register(exitFunction)
 
 if os.name=='nt':
-    signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
-signal.signal(signal.SIGINT, lambda x,y: exitFunction())
+    #signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
+    breakHandler = windows_utils.CtrlHandlerRoutine(lambda x: exitFunction())
+    windows_utils.SetConsoleCtrlHandler(breakHandler, True)
+
+#signal.signal(signal.SIGINT, lambda x,y: exitFunction())
 
 if usbip and not noLaunch:
     print("Starting "+usbip)
@@ -473,3 +481,4 @@ if usbip and not noLaunch:
     print("Press ctrl-c to exit")
 
 usb_container.run(forceIP=usbip is not None)
+exitFunction()

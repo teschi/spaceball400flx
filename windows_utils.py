@@ -28,6 +28,7 @@ from ctypes.wintypes import LPVOID
 from ctypes.wintypes import LPSTR
 from ctypes.wintypes import HMENU
 from ctypes.wintypes import HWND
+from ctypes import WINFUNCTYPE
 import serial
 from serial.win32 import ULONG_PTR
 from serial.tools import list_ports_common
@@ -159,6 +160,11 @@ setupapi = ctypes.windll.LoadLibrary("setupapi")
 SetupDiDestroyDeviceInfoList = setupapi.SetupDiDestroyDeviceInfoList
 SetupDiDestroyDeviceInfoList.argtypes = [HDEVINFO]
 SetupDiDestroyDeviceInfoList.restype = BOOL
+
+CtrlHandlerRoutine = WINFUNCTYPE(BOOL, DWORD)        
+SetConsoleCtrlHandler = ctypes.windll.kernel32.SetConsoleCtrlHandler
+SetConsoleCtrlHandler.argtypes = (CtrlHandlerRoutine, BOOL)
+SetConsoleCtrlHandler.restype = BOOL
 
 SetupDiEnumDeviceInterfaces = ctypes.windll.setupapi.SetupDiEnumDeviceInterfaces
 SetupDiEnumDeviceInterfaces.argtypes = [HDEVINFO, PSP_DEVINFO_DATA, ctypes.POINTER(GUID), DWORD, PSP_DEVICE_INTERFACE_DATA]
@@ -416,7 +422,7 @@ def windowsRead(handle, n):
         return bytes(bytearray(buf.Buffer)[:didRead.value])
     else:
         return 0    
-        
+
 def disableClose():
     DeleteMenu(GetSystemMenu(GetConsoleWindow(), False),SC_CLOSE, MF_BYCOMMAND);
 

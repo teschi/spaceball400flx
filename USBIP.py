@@ -341,9 +341,13 @@ class USBDevice(object):
         print("Attached to vbus port "+str(self.port))
         
     def detach(self):
-        if not self.attached or not self.channel.file:
+        if not self.attached:
             return
-        windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
+        if not self.channel.file:
+            self.channel.close()
+        else:
+            windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
+            self.channel.close()
         self.attached = False
 
     def generate_raw_configuration(self):
@@ -406,6 +410,7 @@ class USBDevice(object):
 
 class USBContainer(object):
     usb_devices = []
+    running = True
 
     def add_usb_device(self, usb_device):
         self.usb_devices.append(usb_device)
@@ -460,10 +465,10 @@ class USBContainer(object):
             self.channel = CommunicationChannel(ip=ip, port=port,endianForWriting='>')
         self.usb_devices[0].channel = self.channel
         self.usb_devices[0].attach()
-        while 1:
+        while self.running:
             self.channel.acceptConnection()
             req = USBIPHeader()
-            while 1:
+            while self.running:
                 if not self.usb_devices[0].attached:
                     data = self.channel.read(8)
                     if not data:
