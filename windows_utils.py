@@ -26,6 +26,8 @@ from ctypes.wintypes import CHAR
 from ctypes.wintypes import HANDLE
 from ctypes.wintypes import LPVOID
 from ctypes.wintypes import LPSTR
+from ctypes.wintypes import HMENU
+from ctypes.wintypes import HWND
 import serial
 from serial.win32 import ULONG_PTR
 from serial.tools import list_ports_common
@@ -37,6 +39,8 @@ FILE_WRITE_DATA = 2
 GENERIC_READ = 0x80000000
 GENERIC_WRITE = 0x40000000
 OPEN_EXISTING = 3
+MF_BYCOMMAND = 0x00000000
+SC_CLOSE = 0xF060
 
 def CTL_CODE(DeviceType, Function, Method, Access): 
     return (DeviceType << 16) | (Access << 14) | (Function << 2) | Method
@@ -195,7 +199,7 @@ SetupDiCallClassInstaller = setupapi.SetupDiCallClassInstaller
 SetupDiCallClassInstaller.argtypes = [DI_FUNCTION, HDEVINFO, PSP_DEVINFO_DATA]
 SetupDiCallClassInstaller.restype = BOOL 
 
-CreateFile = ctypes.windll.Kernel32.CreateFileA
+CreateFile = ctypes.windll.kernel32.CreateFileA
 CreateFile.argtypes = [LPSTR, DWORD, DWORD, LPVOID, DWORD, DWORD, HANDLE]
 CreateFile.restype  = HANDLE
 
@@ -206,6 +210,18 @@ ReadFile.restype = BOOL
 WriteFile = ctypes.windll.kernel32.WriteFile
 WriteFile.argtypes = [HANDLE, LPVOID, DWORD, LPDWORD, LPVOID]
 WriteFile.restype = BOOL
+
+DeleteMenu = ctypes.windll.user32.DeleteMenu
+DeleteMenu.argtypes = [HMENU, UINT, UINT]
+DeleteMenu.restype = BOOL
+
+GetSystemMenu = ctypes.windll.user32.GetSystemMenu
+GetSystemMenu.argtypes = [HWND, BOOL]
+GetSystemMenu.restype = HMENU
+
+GetConsoleWindow = ctypes.windll.kernel32.GetConsoleWindow
+GetConsoleWindow.argtypes = []
+GetConsoleWindow.restype = HWND
 
 DIGCF_PRESENT = 2
 DIGCF_DEVICEINTERFACE = 16
@@ -400,6 +416,9 @@ def windowsRead(handle, n):
         return bytes(bytearray(buf.Buffer)[:didRead.value])
     else:
         return 0    
+        
+def disableClose():
+    DeleteMenu(GetSystemMenu(GetConsoleWindow(), False),SC_CLOSE, MF_BYCOMMAND);
 
 def comports(include_links=False):
     """Return a list of info objects about serial ports"""

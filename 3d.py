@@ -128,6 +128,9 @@ if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
             args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
         ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
         sys.exit(0)
+        
+if os.name == 'nt' and builtins.USBIP_VERSION == 262:
+    windows_utils.disableClose()
     
 from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest    
 
