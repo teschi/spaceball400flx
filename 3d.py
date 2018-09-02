@@ -449,25 +449,24 @@ t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
 t1.start()
 
-def exitFunction():
+def windowsExit():
     global running
     if running:
         print("Exiting...")
-        sleep(1)
         running = False
         usb_container.running = False
         if os.name == 'nt' and builtins.USBIP_VERSION == 262:
             uninstallDriver()
         else:
             usb_container.detach()
-        print("Bye")
+        print("Bye!")
     return False
 
 #atexit.register(exitFunction)
 
 if os.name=='nt':
     #signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
-    breakHandler = windows_utils.CtrlHandlerRoutine(lambda x: exitFunction())
+    breakHandler = windows_utils.CtrlHandlerRoutine(lambda x: windowsExit())
     windows_utils.SetConsoleCtrlHandler(breakHandler, True)
 
 #signal.signal(signal.SIGINT, lambda x,y: exitFunction())
@@ -481,4 +480,4 @@ if usbip and not noLaunch:
     print("Press ctrl-c to exit")
 
 usb_container.run(forceIP=usbip is not None)
-exitFunction()
+windowsExit()
