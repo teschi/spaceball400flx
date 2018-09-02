@@ -172,7 +172,6 @@ def persistentOpen():
             if port is not None:
                 print("Opening "+port)
                 conn = serial.Serial(port=port,baudrate=9600,timeout=TIMEOUT)
-                print("Opened")
             else:
                 for p in serial.tools.list_ports.comports():
                     if p.description.lower().startswith(description.lower()):
@@ -183,7 +182,7 @@ def persistentOpen():
             if conn is not None:
                 sleep(1)
                 conn.reset_input_buffer()
-                print("Init")
+                print("Initializing serial connection")
                 confirmWrite(b"P20")
                 confirmWrite(b"Y"+sensitivity)
                 confirmWrite(b"A271006", b"a271006E")
@@ -440,10 +439,10 @@ def uninstallDriver():
     if os.name=='nt':
         if windows_utils.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
             print("Success uninstalling driver")
-            sleep(1)
+            sleep(2)
         else:
             print("Failure uninstalling driver")
-            sleep(10)
+            sleep(5)
 
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
@@ -452,24 +451,23 @@ t1.start()
 def windowsExit():
     global running
     if running:
-        print("Exiting...")
         running = False
+        print("Exiting...")
         usb_container.running = False
         if os.name == 'nt' and builtins.USBIP_VERSION == 262:
             uninstallDriver()
         else:
             usb_container.detach()
-        print("Bye!")
+        print("Bye")
+        windows_utils.ExitProcess(0)
     return False
-
-#atexit.register(exitFunction)
-
+    
 if os.name=='nt':
-    #signal.signal(signal.SIGBREAK, lambda x,y: exitFunction())
     breakHandler = windows_utils.CtrlHandlerRoutine(lambda x: windowsExit())
     windows_utils.SetConsoleCtrlHandler(breakHandler, True)
-
-#signal.signal(signal.SIGINT, lambda x,y: exitFunction())
+    signal.signal(signal.SIGBREAK, lambda x,y: windowsExit)
+    signal.signal(signal.SIGINT, lambda x,y: windowsExit)
+    atexit.register(lambda: windowsExit())
 
 if usbip and not noLaunch:
     print("Starting "+usbip)
@@ -480,4 +478,3 @@ if usbip and not noLaunch:
     print("Press ctrl-c to exit")
 
 usb_container.run(forceIP=usbip is not None)
-windowsExit()

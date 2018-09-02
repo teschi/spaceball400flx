@@ -59,7 +59,6 @@ def ValidHandle(value, func, arguments):
         raise ctypes.WinError()
     return value
 
-
 NULL = 0
 LPOVERLAPPED = LPVOID
 HDEVINFO = ctypes.c_void_p
@@ -169,6 +168,10 @@ SetConsoleCtrlHandler.restype = BOOL
 SetupDiEnumDeviceInterfaces = ctypes.windll.setupapi.SetupDiEnumDeviceInterfaces
 SetupDiEnumDeviceInterfaces.argtypes = [HDEVINFO, PSP_DEVINFO_DATA, ctypes.POINTER(GUID), DWORD, PSP_DEVICE_INTERFACE_DATA]
 SetupDiEnumDeviceInterfaces.restype = BOOL
+
+ExitProcess = ctypes.windll.kernel32.ExitProcess
+ExitProcess.argtypes = [UINT]
+ExitProcess.restype = None
 
 SetupDiGetDeviceInterfaceDetail = ctypes.windll.setupapi.SetupDiGetDeviceInterfaceDetailW
 SetupDiGetDeviceInterfaceDetail.argtypes = [HDEVINFO, PSP_DEVICE_INTERFACE_DATA, PSP_DEVICE_INTERFACE_DETAIL_DATA, DWORD, PDWORD, PSP_DEVINFO_DATA]
