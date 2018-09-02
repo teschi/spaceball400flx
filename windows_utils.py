@@ -25,6 +25,7 @@ from ctypes.wintypes import WCHAR
 from ctypes.wintypes import CHAR
 from ctypes.wintypes import HANDLE
 from ctypes.wintypes import LPVOID
+from ctypes.wintypes import LPSTR
 import serial
 from serial.win32 import ULONG_PTR
 from serial.tools import list_ports_common
@@ -33,6 +34,9 @@ FILE_DEVICE_BUS_EXTENDER = 0x0000002a
 METHOD_BUFFERED = 0
 FILE_READ_DATA = 1
 FILE_WRITE_DATA = 2
+GENERIC_READ = 0x80000000
+GENERIC_WRITE = 0x40000000
+OPEN_EXISTING = 3
 
 def CTL_CODE(DeviceType, Function, Method, Access): 
     return (DeviceType << 16) | (Access << 14) | (Function << 2) | Method
@@ -94,6 +98,12 @@ class SP_DEVINFO_DATA(ctypes.Structure):
     def __str__(self):
         return "ClassGuid:{} DevInst:{}".format(self.ClassGuid, self.DevInst)
 
+class ioctl_usbvbus_unplug(ctypes.Structure):
+    _fields_ = [
+        ('addr', CHAR),
+        ('unused', CHAR*3)
+    ]
+
 class ioctl_usbvbus_get_ports_status(ctypes.Structure):
     _fields_ = [
         ('portStatus', CHAR*128)
@@ -108,6 +118,20 @@ class SP_DEVICE_INTERFACE_DATA(ctypes.Structure):
     ]
     def __str__(self):
         return "InterfaceClassGuid:%s Flags:%s" % (self.InterfaceClassGuid, self.Flags)
+
+class ioctl_usbvbus_plugin(ctypes.Structure):
+    _fields_ = [
+        ('devid', DWORD),
+        ('vendor', WORD),
+        ('product', WORD),
+        ('version', WORD),
+        ('speed', BYTE),
+        ('inum', BYTE),
+        ('int0_class', BYTE),
+        ('int0_subclass', BYTE),
+        ('int0_protocol', BYTE),
+        ('addr', BYTE)
+    ]
 
 PSP_DEVICE_INTERFACE_DATA = ctypes.POINTER(SP_DEVICE_INTERFACE_DATA)
 PSP_DEVINFO_DATA = ctypes.POINTER(SP_DEVINFO_DATA)
@@ -170,6 +194,18 @@ DIF_REMOVE = 5
 SetupDiCallClassInstaller = setupapi.SetupDiCallClassInstaller
 SetupDiCallClassInstaller.argtypes = [DI_FUNCTION, HDEVINFO, PSP_DEVINFO_DATA]
 SetupDiCallClassInstaller.restype = BOOL 
+
+CreateFile = ctypes.windll.Kernel32.CreateFileA
+CreateFile.argtypes = [LPSTR, DWORD, DWORD, LPVOID, DWORD, DWORD, HANDLE]
+CreateFile.restype  = HANDLE
+
+ReadFile = ctypes.windll.kernel32.ReadFile
+ReadFile.argtypes = [HANDLE, LPVOID, DWORD, LPDWORD, LPVOID]
+ReadFile.restype = BOOL
+
+WriteFile = ctypes.windll.kernel32.WriteFile
+WriteFile.argtypes = [HANDLE, LPVOID, DWORD, LPDWORD, LPVOID]
+WriteFile.restype = BOOL
 
 DIGCF_PRESENT = 2
 DIGCF_DEVICEINTERFACE = 16
@@ -300,24 +336,71 @@ def getVBUSNodeName():
         
     return detail.DevicePath
     
-def vbusGetPortsStatus(file):
+def vbusGetPortsStatus(vbus):
     class STATUS_BUFFER(ctypes.Structure):
             _fields_ = [
                 ('Buffer', BYTE*128),
             ]
     buf = STATUS_BUFFER()
     len = DWORD(0)
-    if DeviceIoControl(msvcrt.get_osfhandle(file.fileno()), IOCTL_USBVBUS_GET_PORTS_STATUS, None, 0, ctypes.byref(buf), ctypes.sizeof(buf), ctypes.byref(len), None):
+    if DeviceIoControl(vbus, IOCTL_USBVBUS_GET_PORTS_STATUS, None, 0, ctypes.byref(buf), ctypes.sizeof(buf), ctypes.byref(len), None):
         return tuple(x&0xFF for x in buf.Buffer)
     else:
         raise VBUSException("Cannot get VBUS port statuses")
         
-def vbusGetFreePort(file):
-    statuses = vbusGetPortsStatus(file)
+def vbusGetFreePort(vbus):
+    statuses = vbusGetPortsStatus(vbus)
     for i in range(1,128):
         if not statuses[i]:
             return i
     raise VBUSException("All VBUS ports in use")
+    
+def vbusAttach(vbus, plugin):
+    plugin.addr = vbusGetFreePort(vbus)
+    unused = ULONG(0)
+    print(ctypes.sizeof(plugin))
+    if DeviceIoControl(vbus, IOCTL_USBVBUS_PLUGIN_HARDWARE, ctypes.byref(plugin), ctypes.sizeof(plugin), None, 0, ctypes.byref(unused), None):
+        return plugin.addr
+    else:
+        raise VBUSException("Error attaching, error number = "+str(ctypes.GetLastError()))
+        
+def vbusDetach(vbus, addr, vendorID, productID):
+    uninstallUSBHID(vendorID, productID) ## don't need to do this with version 272
+    if addr is not None:
+        unplug = ioctl_usbvbus_unplug(addr=addr)
+        unused = ULONG(0)
+        DeviceIoControl(vbus, IOCTL_USBVBUS_PLUGIN_HARDWARE, ctypes.byref(unplug), ctypes.sizeof(unplug), None, 0, ctypes.byref(unused), None)
+        
+def windowsOpen(filename):
+    return CreateFile(LPSTR(filename.encode()), GENERIC_READ|GENERIC_WRITE, 0, None, OPEN_EXISTING, 0, None)
+    
+def windowsWrite(handle, data):
+    wrote = DWORD(0)
+    n = len(data)
+    class DATA_BUFFER(ctypes.Structure):
+            _fields_ = [
+                ('Buffer', BYTE*n),
+            ]
+    buf = DATA_BUFFER()
+    for i in range(n):
+        buf.Buffer[i] = data[i]
+    #buf.Buffer = bytearray(data)
+    if WriteFile(handle, ctypes.byref(buf), n, ctypes.byref(wrote), None):
+        return wrote
+    else:
+        return -1
+    
+def windowsRead(handle, n):
+    didRead = DWORD(0)
+    class DATA_BUFFER(ctypes.Structure):
+            _fields_ = [
+                ('Buffer', BYTE*n),
+            ]
+    buf = DATA_BUFFER()
+    if ReadFile(handle, ctypes.byref(buf), n, ctypes.byref(didRead), None):
+        return bytes(bytearray(buf.Buffer)[:didRead.value])
+    else:
+        return 0    
 
 def comports(include_links=False):
     """Return a list of info objects about serial ports"""
