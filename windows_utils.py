@@ -6,6 +6,7 @@
 # SPDX-License-Identifier:    BSD-3-Clause
 
 from __future__ import absolute_import
+import winreg
 
 # pylint: disable=invalid-name,too-few-public-methods
 import re
@@ -22,7 +23,7 @@ from ctypes.wintypes import HKEY
 from ctypes.wintypes import BYTE
 from ctypes.wintypes import UINT
 from ctypes.wintypes import WCHAR
-from ctypes.wintypes import CHAR
+#from ctypes.wintypes import CHAR
 from ctypes.wintypes import HANDLE
 from ctypes.wintypes import LPVOID
 from ctypes.wintypes import LPSTR
@@ -104,13 +105,13 @@ class SP_DEVINFO_DATA(ctypes.Structure):
 
 class ioctl_usbvbus_unplug(ctypes.Structure):
     _fields_ = [
-        ('addr', CHAR),
-        ('unused', CHAR*3)
+        ('addr', BYTE),
+        ('unused', BYTE*3)
     ]
 
 class ioctl_usbvbus_get_ports_status(ctypes.Structure):
     _fields_ = [
-        ('portStatus', CHAR*128)
+        ('portStatus', BYTE*128)
     ]
 
 class SP_DEVICE_INTERFACE_DATA(ctypes.Structure):
@@ -432,12 +433,27 @@ def disableClose():
 def comports(include_links=False):
     """Return a list of info objects about serial ports"""
     return list(iterate_comports())
+    
+def getVBUSVersion():
+    k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, "SYSTEM\\DriverDatabase\\DriverPackages", 0, winreg.KEY_ENUMERATE_SUB_KEYS)
+    i = 0
+    try:
+        while True:
+            sub = winreg.EnumKey(k,i)
+            i += 1
+            if sub.startswith("usbipenum.inf"):
+                k2 = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, "SYSTEM\\DriverDatabase\\DriverPackages\\"+sub, 0, winreg.KEY_READ)
+                try:
+                    return 262 if winreg.QueryValueEx(k2, "SignerName")[0] == "ReactOS Foundation" else 273
+                except:
+                    return 273
+    except OSError:
+        return 262
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # test
 if __name__ == '__main__':
+    print(getVBUSVersion())
     #uninstallUSBHID(0x46d,0xc62b)
     name = getVBUSNodeName()
-    f = open(name, "w+b")
-    print(vbusGetPortsStatus(f))
     

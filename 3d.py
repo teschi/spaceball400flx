@@ -42,7 +42,7 @@ event = threading.Event()
 
 builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
 
-opts, args = getopt.getopt(sys.argv[1:], "nu:m:P:V:chljp:d:", ["no-admin", "new-driver", "no-launch", "usbip-directory=", "max", 
+opts, args = getopt.getopt(sys.argv[1:], "onu:m:P:V:chljp:d:", ["no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
                     "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
@@ -54,6 +54,7 @@ while i < len(opts):
 -l --list-ports       list serial ports
 -c --cubic            cubic sensitivity mode
 -n --new-driver       new patched driver
+-o --old-driver       old but signed driver
 -mMAX --max=MAX       set maximum value for all axes
 -VVID --vendor=VID    force vendor ID
 -PPID --product=PID   force product ID
@@ -95,13 +96,13 @@ while i < len(opts):
         noLaunch = True
     elif opt in ('-n', '--new-driver'):
         builtins.USBIP_VERSION = 273
+    elif opt in ('-o', '--old-driver'):
+        builtins.USBIP_VERSION = 262
     i += 1
 
 if not builtins.USBIP_VERSION:
-    if usbip and os.name == 'nt' and not builtins.USBIP_VERSION:
-        u = subprocess.Popen([usbip, "-v"], stdout=subprocess.PIPE)
-        builtins.USBIP_VERSION = 273 if u.stdout.readline().startswith(b"usbip for windows") else 262
-        u.stdout.close()
+    if os.name == 'nt':
+        builtins.USBIP_VERSION = windows_utils.getVBUSVersion()
     else:
         builtins.USBIP_VERSION = 262
 
@@ -111,7 +112,7 @@ def is_admin():
     except:
         return False
 
-print("Assuming protocol",builtins.USBIP_VERSION)
+print("Assuming version",builtins.USBIP_VERSION)
 if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
     import platform
     if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
@@ -123,7 +124,8 @@ if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
                 return z
             else:
                 return unicode(z)
-        print("Relaunching as administrator.\nPlease make sure that to terminate the launched process you use ctrl-c in its window.")
+        print("Relaunching as administrator.")
+        print("If you don't want to do that, you'll need the new unsigned driver.")
         args = u(__file__)
         if len(sys.argv) >= 2:
             args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
