@@ -14,7 +14,6 @@ import ctypes
 import platform
 import msvcrt
 from ctypes.wintypes import BOOL
-from ctypes.wintypes import PBOOL
 from ctypes.wintypes import HWND
 from ctypes.wintypes import DWORD
 from ctypes.wintypes import WORD
@@ -24,7 +23,6 @@ from ctypes.wintypes import HKEY
 from ctypes.wintypes import BYTE
 from ctypes.wintypes import UINT
 from ctypes.wintypes import WCHAR
-#from ctypes.wintypes import CHAR
 from ctypes.wintypes import HANDLE
 from ctypes.wintypes import LPVOID
 from ctypes.wintypes import LPSTR
@@ -67,6 +65,7 @@ HDEVINFO = ctypes.c_void_p
 LPCTSTR = ctypes.c_wchar_p
 PCTSTR = ctypes.c_wchar_p
 PTSTR = ctypes.c_wchar_p
+PBOOL = ctypes.POINTER(BOOL)
 LPDWORD = PDWORD = ctypes.POINTER(DWORD)
 #~ LPBYTE = PBYTE = ctypes.POINTER(BYTE)
 LPBYTE = PBYTE = ctypes.c_void_p        # XXX avoids error about types

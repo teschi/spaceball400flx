@@ -3,7 +3,11 @@ import socket
 import sys
 import struct
 import types
-import builtins
+try:
+    import builtins
+except:
+    import __builtin__
+    builtins = __builtin__
 import os
 import time
 if os.name == 'nt':

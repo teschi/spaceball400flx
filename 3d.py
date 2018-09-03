@@ -1,5 +1,9 @@
 from __future__ import print_function
-import builtins
+try:
+    import builtins
+except:
+    import __builtin__
+    builtins = __builtin__
 import atexit
 import datetime
 import struct
