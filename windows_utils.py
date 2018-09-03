@@ -42,6 +42,7 @@ GENERIC_WRITE = 0x40000000
 OPEN_EXISTING = 3
 MF_BYCOMMAND = 0x00000000
 SC_CLOSE = 0xF060
+DIGCF_ALLCLASSES = 4
 
 def CTL_CODE(DeviceType, Function, Method, Access): 
     return (DeviceType << 16) | (Access << 14) | (Function << 2) | Method
@@ -262,67 +263,55 @@ def uninstallUSBHID(vendorID,productID):
     error = False
     
     searchString = "USB\VID_%04X&PID_%04X" % (vendorID,productID)
-    GUIDs = (GUID * 8)()  # so far only seen one used, so hope 8 are enough...
-    guids_size = DWORD()
-    if not SetupDiClassGuidsFromName(
-            "HIDClass",
-            GUIDs,
-            ctypes.sizeof(GUIDs),
-            ctypes.byref(guids_size)):
-        raise ctypes.WinError()
-        
-    # repeat for all possible GUIDs
-    for index in range(guids_size.value):
-        bInterfaceNumber = None
-        g_hdi = SetupDiGetClassDevs(
-            ctypes.byref(GUIDs[index]),
-            None,
-            NULL,
-            DIGCF_PRESENT)  # was DIGCF_PRESENT|DIGCF_DEVICEINTERFACE which misses CDC ports
+    g_hdi = SetupDiGetClassDevs(
+        None,
+        "USB",
+        NULL,
+        DIGCF_PRESENT|DIGCF_ALLCLASSES)  # was DIGCF_PRESENT|DIGCF_DEVICEINTERFACE which misses CDC ports
 
-        devinfo = SP_DEVINFO_DATA()
-        devinfo.cbSize = ctypes.sizeof(devinfo)
-        
-        i = 0
-        while SetupDiEnumDeviceInfo(g_hdi, i, ctypes.byref(devinfo)):
-            i += 1
+    devinfo = SP_DEVINFO_DATA()
+    devinfo.cbSize = ctypes.sizeof(devinfo)
+    
+    i = 0
+    while SetupDiEnumDeviceInfo(g_hdi, i, ctypes.byref(devinfo)):
+        i += 1
 
-            # hardware ID
-            szHardwareID = ctypes.create_unicode_buffer(250)
-            # try to get ID that includes serial number
-            if not SetupDiGetDeviceInstanceId(
+        # hardware ID
+        szHardwareID = ctypes.create_unicode_buffer(250)
+        # try to get ID that includes serial number
+        if not SetupDiGetDeviceInstanceId(
+                g_hdi,
+                ctypes.byref(devinfo),
+                #~ ctypes.byref(szHardwareID),
+                szHardwareID,
+                ctypes.sizeof(szHardwareID) - 1,
+                None):
+            # fall back to more generic hardware ID if that would fail
+            if not SetupDiGetDeviceRegistryProperty(
                     g_hdi,
                     ctypes.byref(devinfo),
-                    #~ ctypes.byref(szHardwareID),
-                    szHardwareID,
+                    SPDRP_HARDWAREID,
+                    None,
+                    ctypes.byref(szHardwareID),
                     ctypes.sizeof(szHardwareID) - 1,
                     None):
-                # fall back to more generic hardware ID if that would fail
-                if not SetupDiGetDeviceRegistryProperty(
-                        g_hdi,
-                        ctypes.byref(devinfo),
-                        SPDRP_HARDWAREID,
-                        None,
-                        ctypes.byref(szHardwareID),
-                        ctypes.sizeof(szHardwareID) - 1,
-                        None):
-                    # Ignore ERROR_INSUFFICIENT_BUFFER
-                    if ctypes.GetLastError() != ERROR_INSUFFICIENT_BUFFER:
-                        raise ctypes.WinError()
-            if szHardwareID.value.startswith(searchString):
-                def uninstall():
-                    if DiUninstallDevice:
-                        ignore = BOOL(False)
-                        return DiUninstallDevice(None, g_hdi, ctypes.byref(devinfo), 0, ctypes.byref(ignore))
-                    else:
-                        return SetupDiRemoveDevice(g_hdi, ctypes.byref(devinfo))
-                
-                if uninstall():
-                    uninstalled = True
+                # Ignore ERROR_INSUFFICIENT_BUFFER
+                if ctypes.GetLastError() != ERROR_INSUFFICIENT_BUFFER:
+                    raise ctypes.WinError()
+        if szHardwareID.value.startswith(searchString):
+            def uninstall():
+                if DiUninstallDevice:
+                    ignore = BOOL(False)
+                    return DiUninstallDevice(None, g_hdi, ctypes.byref(devinfo), 0, ctypes.byref(ignore))
                 else:
-                    print("Error uninstalling "+szHardwareID.value)
-                    error = True
-        SetupDiDestroyDeviceInfoList(g_hdi)
+                    return SetupDiRemoveDevice(g_hdi, ctypes.byref(devinfo))
+            
+            if uninstall():
+                uninstalled = True
+            else:
+                print("Error uninstalling "+szHardwareID.value)
+                error = True
+    SetupDiDestroyDeviceInfoList(g_hdi)
     return uninstalled and not error
 
 class VBUSException(Exception):
@@ -473,6 +462,7 @@ def getVBUSVersion():
 # test
 if __name__ == '__main__':
     print(getVBUSVersion())
-    #uninstallUSBHID(0x46d,0xc62b)
-    name = getVBUSNodeName()
+    print(getVBUSNodeName())
+    print(uninstallUSBHID(0x46d,0xc62b))
+    
     
