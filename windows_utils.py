@@ -14,6 +14,7 @@ import ctypes
 import platform
 import msvcrt
 from ctypes.wintypes import BOOL
+from ctypes.wintypes import PBOOL
 from ctypes.wintypes import HWND
 from ctypes.wintypes import DWORD
 from ctypes.wintypes import WORD
@@ -161,6 +162,14 @@ SetupDiDestroyDeviceInfoList = setupapi.SetupDiDestroyDeviceInfoList
 SetupDiDestroyDeviceInfoList.argtypes = [HDEVINFO]
 SetupDiDestroyDeviceInfoList.restype = BOOL
 
+try:
+    newdev = ctypes.windll.LoadLibrary("newdev")
+    DiUninstallDevice = newdev.DiUninstallDevice
+    DiUninstallDevice.argtypes = [HWND, HDEVINFO, PSP_DEVINFO_DATA, DWORD, PBOOL]
+    DiUninstallDevice.restype = BOOL
+except:
+    DiUninstallDevice = None
+    
 SetupDiRemoveDevice = setupapi.SetupDiRemoveDevice
 SetupDiRemoveDevice.argtypes = [HDEVINFO, PSP_DEVINFO_DATA]
 SetupDiRemoveDevice.restype = BOOL
@@ -249,7 +258,7 @@ DICS_FLAG_GLOBAL = 1
 DIREG_DEV = 0x00000001
 KEY_READ = 0x20019
 
-def uninstallUSBHID(vendorID,productID,useSetupDiRemoveDevice=True):
+def uninstallUSBHID(vendorID,productID):
     uninstalled = False
     error = False
     
@@ -303,10 +312,11 @@ def uninstallUSBHID(vendorID,productID,useSetupDiRemoveDevice=True):
                         raise ctypes.WinError()
             if szHardwareID.value.startswith(searchString):
                 def uninstall():
-                    if useSetupDiRemoveDevice:
-                        return SetupDiRemoveDevice(g_hdi, ctypes.byref(devinfo))
+                    if DiUninstallDevice:
+                        ignore = BOOL(False)
+                        return DiUninstallDevice(None, g_hdi, ctypes.byref(devinfo), 0, ctypes.byref(ignore))
                     else:
-                        return SetupDiCallClassInstaller(DIF_REMOVE, g_hdi, ctypes.byref(devinfo))
+                        return SetupDiRemoveDevice(g_hdi, ctypes.byref(devinfo))
                 
                 if uninstall():
                     uninstalled = True
