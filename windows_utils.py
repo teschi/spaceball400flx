@@ -161,6 +161,10 @@ SetupDiDestroyDeviceInfoList = setupapi.SetupDiDestroyDeviceInfoList
 SetupDiDestroyDeviceInfoList.argtypes = [HDEVINFO]
 SetupDiDestroyDeviceInfoList.restype = BOOL
 
+SetupDiRemoveDevice = setupapi.SetupDiRemoveDevice
+SetupDiRemoveDevice.argtypes = [HDEVINFO, PSP_DEVINFO_DATA]
+SetupDiRemoveDevice.restype = BOOL
+
 CtrlHandlerRoutine = WINFUNCTYPE(BOOL, DWORD)        
 SetConsoleCtrlHandler = ctypes.windll.kernel32.SetConsoleCtrlHandler
 #SetConsoleCtrlHandler.argtypes = (CtrlHandlerRoutine, BOOL)
@@ -245,7 +249,7 @@ DICS_FLAG_GLOBAL = 1
 DIREG_DEV = 0x00000001
 KEY_READ = 0x20019
 
-def uninstallUSBHID(vendorID,productID):
+def uninstallUSBHID(vendorID,productID,useSetupDiRemoveDevice=True):
     uninstalled = False
     error = False
     
@@ -298,7 +302,13 @@ def uninstallUSBHID(vendorID,productID):
                     if ctypes.GetLastError() != ERROR_INSUFFICIENT_BUFFER:
                         raise ctypes.WinError()
             if szHardwareID.value.startswith(searchString):
-                if SetupDiCallClassInstaller(DIF_REMOVE, g_hdi, ctypes.byref(devinfo)):
+                def uninstall():
+                    if useSetupDiRemoveDevice:
+                        return SetupDiRemoveDevice(g_hdi, ctypes.byref(devinfo))
+                    else:
+                        return SetupDiCallClassInstaller(DIF_REMOVE, g_hdi, ctypes.byref(devinfo))
+                
+                if uninstall():
                     uninstalled = True
                 else:
                     print("Error uninstalling "+szHardwareID.value)
