@@ -3,6 +3,7 @@ import socket
 import sys
 import struct
 import types
+from time import sleep
 try:
     import builtins
 except:
@@ -350,8 +351,18 @@ class USBDevice(object):
         if not self.channel.file:
             self.channel.close()
         else:
-            windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
-            self.channel.close()
+            if os.name=='nt':
+                if USBIP_VERSION == 262:
+                    print("Uninstalling")
+                    if windows_utils.uninstallUSB(self.vendorID, self.productID, "on USB/IP Enumerator"):
+                        print("Success uninstalling device")
+                        sleep(2)
+                    else:
+                        print("Failure uninstalling device")
+                        sleep(5)
+                else:
+                    windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
+                    self.channel.close()
         self.attached = False
 
     def generate_raw_configuration(self):

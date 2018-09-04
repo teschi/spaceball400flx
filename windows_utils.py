@@ -1,4 +1,4 @@
-#! python
+#! 
 #
 # (C) 2001-2016 Chris Liechti <cliechti@gmx.net>
 # (C) 2018 Alexander Pruss
@@ -70,7 +70,6 @@ PBOOL = ctypes.POINTER(BOOL)
 LPDWORD = PDWORD = ctypes.POINTER(DWORD)
 #~ LPBYTE = PBYTE = ctypes.POINTER(BYTE)
 LPBYTE = PBYTE = ctypes.c_void_p        # XXX avoids error about types
-
 ACCESS_MASK = DWORD
 REGSAM = ACCESS_MASK
 
@@ -251,14 +250,17 @@ DIGCF_DEVICEINTERFACE = 16
 INVALID_HANDLE_VALUE = 0
 ERROR_INSUFFICIENT_BUFFER = 122
 SPDRP_HARDWAREID = 1
+SPDRP_ENUMERATOR_NAME = 0x00000016
+SPDRP_BUSTYPEGUID = 0x13
 SPDRP_FRIENDLYNAME = 12
+SPDRP_LOCATION_INFORMATION = 13
 SPDRP_LOCATION_PATHS = 35
 SPDRP_MFG = 11
 DICS_FLAG_GLOBAL = 1
 DIREG_DEV = 0x00000001
 KEY_READ = 0x20019
 
-def uninstallUSBHID(vendorID,productID):
+def uninstallUSB(vendorID,productID,location=None):
     uninstalled = False
     error = False
     
@@ -305,6 +307,19 @@ def uninstallUSBHID(vendorID,productID):
                     return DiUninstallDevice(None, g_hdi, ctypes.byref(devinfo), 0, ctypes.byref(ignore))
                 else:
                     return SetupDiRemoveDevice(g_hdi, ctypes.byref(devinfo))
+            if DiUninstallDevice and location:
+                # on Win7 or below, uninstall all instances, even if location is specified,
+                # in order to make sure that children get uninstalled, too
+                szLocation = ctypes.create_unicode_buffer(len(location)+4)
+                if ( not SetupDiGetDeviceRegistryProperty(
+                        g_hdi,
+                        ctypes.byref(devinfo),
+                        SPDRP_LOCATION_INFORMATION,
+                        None,
+                        ctypes.byref(szLocation),
+                        ctypes.sizeof(szLocation) - 1,
+                        None) or szLocation.value != location ):
+                    continue
             
             if uninstall():
                 uninstalled = True
@@ -463,6 +478,4 @@ def getVBUSVersion():
 if __name__ == '__main__':
     print(getVBUSVersion())
     print(getVBUSNodeName())
-    print(uninstallUSBHID(0x46d,0xc62b))
-    
-    
+    print(uninstallUSB(0x46d,0xc62b, "on USB/IP Enumerator"))

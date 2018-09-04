@@ -447,16 +447,6 @@ def serialLoop():
         else:
             overflow = True
 
-def uninstallDriver():
-    if os.name=='nt':
-        print("Uninstalling")
-        if windows_utils.uninstallUSBHID(USBHID.vendorID, USBHID.productID):
-            print("Success uninstalling device")
-            sleep(2)
-        else:
-            print("Failure uninstalling device")
-            sleep(5)
-
 t1 = threading.Thread(target=serialLoop)
 t1.daemon = True
 t1.start()
@@ -483,10 +473,7 @@ def windowsExit():
             
         running = False
         usb_container.running = False
-        if builtins.USBIP_VERSION == 262:
-            uninstallDriver()
-        else:
-            usb_container.detach()
+        usb_container.detach()
         print("Bye!")       
         windows_utils.ExitProcess(0)
         return False
