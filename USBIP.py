@@ -520,7 +520,6 @@ class USBContainer(object):
                     self.usb_devices[0].handle_usb_request(usb_req)
             self.channel.closeConnection()
         if self.usb_devices[0].detaching:
-            print("Waiting on detachment")
             while self.usb_devices[0].detaching:
                 sleep(0.5)
         else:
