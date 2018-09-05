@@ -139,7 +139,7 @@ if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
 #if os.name == 'nt' and builtins.USBIP_VERSION == 262:
 #    windows_utils.disableClose()
 #    
-from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest    
+from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
 
 def trim(x):
     if x&0x8000:

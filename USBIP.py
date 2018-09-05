@@ -325,6 +325,7 @@ class USBDevice(object):
     def __init__(self):
         self.generate_raw_configuration()
         self.attached = False
+        self.detaching = False
         
     def attach(self):
         if self.attached or not self.channel.file:
@@ -352,6 +353,7 @@ class USBDevice(object):
             self.channel.close()
         else:
             if os.name=='nt':
+                self.detaching = True
                 if USBIP_VERSION == 262:
                     print("Uninstalling")
                     if windows_utils.uninstallUSB(self.vendorID, self.productID, "on USB/IP Enumerator"):
@@ -359,10 +361,13 @@ class USBDevice(object):
                         sleep(2)
                     else:
                         print("Failure uninstalling device")
-                        sleep(5)
-                else:
-                    windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
-                    self.channel.close()
+                        print("In a minute you will probably get a BSOD unless you reboot or delete the device manually.")
+                        sleep(60)
+                print("Detaching device")
+                windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
+                sleep(1)
+                self.channel.close()
+                self.detaching = False
         self.attached = False
 
     def generate_raw_configuration(self):
@@ -514,4 +519,6 @@ class USBContainer(object):
                                          data=data)
                     self.usb_devices[0].handle_usb_request(usb_req)
             self.channel.closeConnection()
-            
+        while self.usb_devices[0].detaching:
+            sleep(0.5)
+        self.usb_devices[0].detach()
