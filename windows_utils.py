@@ -186,6 +186,14 @@ ExitProcess = ctypes.windll.kernel32.ExitProcess
 ExitProcess.argtypes = [UINT]
 ExitProcess.restype = None
 
+GetCurrentProcess = ctypes.windll.kernel32.GetCurrentProcess
+GetCurrentProcess.argtypes = []
+GetCurrentProcess.restype = HANDLE
+
+TerminateProcess = ctypes.windll.kernel32.TerminateProcess
+TerminateProcess.argtypes = [HANDLE, UINT]
+TerminateProcess.restype = BOOL
+
 SetupDiGetDeviceInterfaceDetail = ctypes.windll.setupapi.SetupDiGetDeviceInterfaceDetailW
 SetupDiGetDeviceInterfaceDetail.argtypes = [HDEVINFO, PSP_DEVICE_INTERFACE_DATA, PSP_DEVICE_INTERFACE_DETAIL_DATA, DWORD, PDWORD, PSP_DEVINFO_DATA]
 SetupDiGetDeviceInterfaceDetail.restype = BOOL

@@ -38,7 +38,7 @@ buttons = 0
 newButtons = False
 newXYZ = False
 newRXYZ = False
-trimValue = 32768
+trimValue = 500
 forceVendorID = None
 forceProductID = None
 usbip = None if os.name == 'nt' else "usbip"
@@ -142,6 +142,8 @@ if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
 from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
 
 def trim(x):
+    if trimValue == 0:
+        return x
     if x&0x8000:
         if (-x)&0xFFFF > trimValue: 
             return (-trimValue)&0xFFFF        
@@ -231,14 +233,26 @@ def persistentRead():
 
 # HID Configuration
 
+if trimValue >= 32768 or trimValue == 0:
+    logicalMin = -32768
+    logicalMax = 32767
+else:
+    logicalMin = -trimValue
+    logicalMax = trimValue
+    
+minLow = logicalMin & 0xFF
+minHigh = (logicalMin & 0xFF00) >> 8
+maxLow = logicalMax & 0xFF
+maxHigh = (logicalMax & 0xFF00) >> 8
+
 descriptor = [
           0x05, 0x01,           #  Usage Page (Generic Desktop)  
           0x09, 0x04 if joystick else 0x08,           #  0x08: Usage (Multi-Axis)  
           0xa1, 0x01,           #  Collection (Application)  
           0xa1, 0x00,           # Collection (Physical)
           0x85, 0x01,           #  Report ID 
-          #0x16, 0x0c, 0xfe,        #logical minimum (-500)
-          #0x26, 0xf4, 0x01,        #logical maximum (500)
+          0x16, minLow, minHigh,        #logical minimum (-500)
+          0x26, maxLow, maxHigh,        #logical maximum (500)
           0x36, 0x00, 0x80,              # Physical Minimum (-32768)
           0x46, 0xff, 0x7f,              #Physical Maximum (32767)
           0x09, 0x30,           #    Usage (X)  
@@ -250,8 +264,8 @@ descriptor = [
           0xC0,                 #  End Collection  
           0xa1, 0x00,            # Collection (Physical)
           0x85, 0x02,         #  Report ID 
-          #0x16,0x0c,0xfe,        #logical minimum (-500)
-          #0x26,0xf4,0x01,        #logical maximum (500)
+          0x16, minLow, minHigh,        #logical minimum (-500)
+          0x26, maxLow, maxHigh,        #logical maximum (500)
           0x36,0x00,0x80,              # Physical Minimum (-32768)
           0x46,0xff,0x7f,              #Physical Maximum (32767)
           0x09, 0x33,           #    Usage (RX)  
