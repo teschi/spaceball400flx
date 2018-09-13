@@ -23,6 +23,7 @@ import signal
 
 COMMAND_TIMEOUT = 2
 TIMEOUT = 5
+axisMap = (0,1,2)
 noLaunch = False
 noAdmin = False
 sensitivity = b'S' # Standard/Cubic
@@ -30,6 +31,7 @@ running = True
 joystick = False
 port = None
 conn = None
+test = False
 description = "USB-SERIAL CH340"
 lock = threading.Lock()
 xyz = [0,0,0]
@@ -46,7 +48,7 @@ event = threading.Event()
 
 builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
 
-opts, args = getopt.getopt(sys.argv[1:], "onu:m:P:V:chljp:d:", ["no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
+opts, args = getopt.getopt(sys.argv[1:], "tonu:m:P:V:chljp:d:", ["test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
                     "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
@@ -59,6 +61,7 @@ while i < len(opts):
 -c --cubic            cubic sensitivity mode
 -n --new-driver       new patched driver
 -o --old-driver       old but signed driver
+-t --test             send test data
 -mMAX --max=MAX       set maximum value for all axes
 -VVID --vendor=VID    force vendor ID
 -PPID --product=PID   force product ID
@@ -67,6 +70,7 @@ while i < len(opts):
         sys.exit(0)
     elif opt in ('-j', '--joystick'):
         joystick = True
+        axisMap = (0,2,1)
     elif opt in ('-p', '--port'):
         port = arg
         description = None
@@ -102,6 +106,8 @@ while i < len(opts):
         builtins.USBIP_VERSION = 273
     elif opt in ('-o', '--old-driver'):
         builtins.USBIP_VERSION = 262
+    elif opt in ('-t', '--test'):
+        test = True
     i += 1
 
 if not builtins.USBIP_VERSION:
@@ -144,6 +150,7 @@ from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurat
 def trim(x):
     if trimValue == 0:
         return x
+    x &= 0xFFFF
     if x&0x8000:
         if (-x)&0xFFFF > trimValue: 
             return (-trimValue)&0xFFFF        
@@ -176,6 +183,7 @@ def confirmWrite(out, confirmation=None):
 def persistentOpen():
     global conn,running
     conn = None
+    print("Trying to open serial connection")
     while running and conn is None:
         try:
             if port is not None:
@@ -366,13 +374,13 @@ class USBHID(USBDevice):
         return_val = b''
         lock.acquire()
         if newRXYZ:
-            return_val = struct.pack("<BHHH", 2, trim(rxyz[0]),trim(rxyz[1]),trim(rxyz[2]))
+            return_val = struct.pack("<BHHH", 2, trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
             newRXYZ = False
         elif newButtons:
             return_val = struct.pack("BBBB", 3, buttons&0xFF, buttons>>8, 0)
             newButtons = False
         elif newXYZ:
-            return_val = struct.pack("<BHHH", 1, trim(xyz[0]),trim(xyz[1]),trim(xyz[2]))
+            return_val = struct.pack("<BHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]))
             newXYZ = False
             newRXYZ = True
         if newXYZ or newRXYZ or newButtons:
@@ -387,7 +395,7 @@ class USBHID(USBDevice):
         if control_req.bmRequestType == 0x81:
             if control_req.bRequest == 0x6:  # Get Descriptor
                 if control_req.wValue == 0x22:  # send initial report
-                    print('send report descriptor')
+                    print('Sending USB HID report descriptor')
                     self.send_usb_req(usb_req, self.generate_hid_report())
                     sentReport = True
 
@@ -403,24 +411,16 @@ usb_container.add_usb_device(usb_Dev)  # Supports only one device!
 def get16(data,offset):
     return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
 
-def processData(data):
+def processData_4000(data):
     global buttons,xyz,rxyz,newXYZ,newRXYZ,newButtons,lock,event
     if len(data) == 15 and data[0] == ord(b'D'):
         lock.acquire()
-        if joystick:
-            xyz[0] = get16(data, 3);
-            xyz[2] = get16(data, 5);
-            xyz[1] = 0xFFFF&-get16(data, 7);
-            rxyz[0] = get16(data, 9);
-            rxyz[2] = get16(data, 11);
-            rxyz[1] = 0xFFFF&-get16(data, 13);
-        else:
-            xyz[0] = get16(data, 3)
-            xyz[1] = get16(data, 5);
-            xyz[2] = 0xFFFF&-get16(data, 7)
-            rxyz[0] = get16(data, 9)
-            rxyz[1] = get16(data, 11)
-            rxyz[2] = 0xFFFF&-get16(data, 13)
+        xyz[0] = get16(data, 3)
+        xyz[1] = get16(data, 5);
+        xyz[2] = -get16(data, 7)
+        rxyz[0] = get16(data, 9)
+        rxyz[1] = get16(data, 11)
+        rxyz[2] = -get16(data, 13)
         newXYZ = True
         event.set()
         lock.release()
@@ -433,7 +433,7 @@ def processData(data):
         event.set()
         lock.release()
 
-def serialLoop():
+def serialLoop(processData=processData_4000):
     global conn,running
     overflow = False
     buffer = bytearray()
@@ -460,8 +460,35 @@ def serialLoop():
             overflow = False
         else:
             overflow = True
+            
+def emulateLoop():
+    def emit(x,y,z,rx,ry,rz,t):
+        global xyz,rxyz,newXYZ,lock,event
+        lock.acquire()
+        xyz = (x,y,z)
+        rxyz = (rx,ry,rz)
+        newXYZ = True
+        lock.release()
+        print(xyz,rxyz)
+        t1 = time() + t
+        while time()<t1:
+            lock.acquire()
+            newXYZ = True
+            event.set()
+            lock.release()
+            sleep(0.1)
+    
+    while running:
+        emit(50,0,0,200,0,0, 3)
+        emit(-50,0,0,-200,0,0, 3)
+        emit(0,0,0,0,200,0, 3)
+        emit(0,0,0,0,-200,0, 3)
+        emit(0,0,0,0,0,200, 3)
+        emit(0,0,0,0,0,-200, 3)
+        emit(0,0,100,0,0,0, 3)
+        emit(0,0,-100,0,0,0, 3)
 
-t1 = threading.Thread(target=serialLoop)
+t1 = threading.Thread(target=emulateLoop if test else serialLoop)
 t1.daemon = True
 t1.start()
 
