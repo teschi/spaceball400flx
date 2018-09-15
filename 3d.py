@@ -462,14 +462,23 @@ def serialLoop(processData=processData_4000):
             overflow = True
             
 def emulateLoop():
-    def emit(x,y,z,rx,ry,rz,t):
-        global xyz,rxyz,newXYZ,lock,event
+    def emit(x,y,z,rx,ry,rz,buttonsToPress,t):
+        global xyz,rxyz,newXYZ,lock,event,newButtons,buttons
         lock.acquire()
         xyz = (x,y,z)
         rxyz = (rx,ry,rz)
         newXYZ = True
         lock.release()
         print(xyz,rxyz)
+        
+        if buttonsToPress:
+            lock.acquire()
+            buttons = buttonsToPress
+            newButtons = True
+            event.set()
+            lock.release()
+            sleep(0.5)
+            
         t1 = time() + t
         while time()<t1:
             lock.acquire()
@@ -477,16 +486,24 @@ def emulateLoop():
             event.set()
             lock.release()
             sleep(0.1)
+            
+        if buttonsToPress:
+            lock.acquire()
+            buttons = 0
+            newButtons = True
+            event.set()
+            lock.release()
+            sleep(0.5)
     
     while running:
-        emit(50,0,0,200,0,0, 3)
-        emit(-50,0,0,-200,0,0, 3)
-        emit(0,0,0,0,200,0, 3)
-        emit(0,0,0,0,-200,0, 3)
-        emit(0,0,0,0,0,200, 3)
-        emit(0,0,0,0,0,-200, 3)
-        emit(0,0,100,0,0,0, 3)
-        emit(0,0,-100,0,0,0, 3)
+        emit(50,0,0,200,0,0, 1<12, 3)                
+        emit(-50,0,0,-200,0,0, 0, 3)
+        emit(0,0,0,0,200,0, 1<12, 3)
+        emit(0,0,0,0,-200,0,0, 3)
+        emit(0,0,0,0,0,200,1<12,  3)
+        emit(0,0,0,0,0,-200,0, 3)
+        emit(0,0,100,0,0,0, 1<12, 3)
+        emit(0,0,-100,0,0,0, 0, 3)
 
 t1 = threading.Thread(target=emulateLoop if test else serialLoop)
 t1.daemon = True
