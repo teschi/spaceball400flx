@@ -376,6 +376,7 @@ class USBHID(USBDevice):
         if newRXYZ:
             return_val = struct.pack("<BHHH", 2, trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
             newRXYZ = False
+            newButtons = True
         elif newButtons:
             return_val = struct.pack("BBBB", 3, buttons&0xFF, buttons>>8, 0)
             newButtons = False
