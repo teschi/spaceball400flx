@@ -43,29 +43,31 @@ newRXYZ = False
 trimValue = 500
 forceVendorID = None
 forceProductID = None
+compatible = False
 usbip = None if os.name == 'nt' else "usbip"
 event = threading.Event()
 
 builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
 
-opts, args = getopt.getopt(sys.argv[1:], "tonu:m:P:V:chljp:d:", ["test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
+opts, args = getopt.getopt(sys.argv[1:], "Ctonu:m:P:V:chljp:d:", ["compatibility-mode", "test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
                     "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
 i = 0
 while i < len(opts):
     opt,arg = opts[i]
     if opt in ('-h', '--help'):
         print("""python 3d.py [options]\n
--h --help             this information
--j --joystick         HID joystick mode 
--l --list-ports       list serial ports
--c --cubic            cubic sensitivity mode
--n --new-driver       new patched driver
--o --old-driver       old but signed driver
--t --test             send test data
--mMAX --max=MAX       set maximum value for all axes
--VVID --vendor=VID    force vendor ID
--PPID --product=PID   force product ID
--pCOMx | --port=COMx         COM port of SpaceBall 4000
+-h --help                this information
+-j --joystick            HID joystick mode 
+-l --list-ports          list serial ports
+-c --cubic               cubic sensitivity mode
+-n --new-driver          new patched driver
+-o --old-driver          old but signed driver
+-c --compatibility-mode  slower compatibility mode
+-t --test                send test data
+-mMAX --max=MAX          set maximum value for all axes
+-VVID --vendor=VID       force vendor ID (hex)
+-PPID --product=PID      force product ID (hex)
+-pCOMx | --port=COMx     COM port of SpaceBall 4000
 -ddesc | --description=desc  description of COM port device starts with desc""")
         sys.exit(0)
     elif opt in ('-j', '--joystick'):
@@ -108,6 +110,8 @@ while i < len(opts):
         builtins.USBIP_VERSION = 262
     elif opt in ('-t', '--test'):
         test = True
+    elif opt in ('-c', '--compatibility-mode'):
+        compatible = True
     i += 1
 
 if not builtins.USBIP_VERSION:
@@ -253,50 +257,83 @@ minHigh = (logicalMin & 0xFF00) >> 8
 maxLow = logicalMax & 0xFF
 maxHigh = (logicalMax & 0xFF00) >> 8
 
-descriptor = [
-          0x05, 0x01,           #  Usage Page (Generic Desktop)  
-          0x09, 0x04 if joystick else 0x08,           #  0x08: Usage (Multi-Axis)  
-          0xa1, 0x01,           #  Collection (Application)  
-          0xa1, 0x00,           # Collection (Physical)
-          0x85, 0x01,           #  Report ID 
-          0x16, minLow, minHigh,        #logical minimum (-500)
-          0x26, maxLow, maxHigh,        #logical maximum (500)
-          0x36, 0x00, 0x80,              # Physical Minimum (-32768)
-          0x46, 0xff, 0x7f,              #Physical Maximum (32767)
-          0x09, 0x30,           #    Usage (X)  
-          0x09, 0x31,           #    Usage (Y)  
-          0x09, 0x32,           #    Usage (Z)  
-          0x75, 0x10,           #    Report Size (16)  
-          0x95, 0x03,           #    Report Count (3)  
-          0x81, 0x02,           #    Input (variable,absolute)  
-          0xC0,                 #  End Collection  
-          0xa1, 0x00,            # Collection (Physical)
-          0x85, 0x02,         #  Report ID 
-          0x16, minLow, minHigh,        #logical minimum (-500)
-          0x26, maxLow, maxHigh,        #logical maximum (500)
-          0x36,0x00,0x80,              # Physical Minimum (-32768)
-          0x46,0xff,0x7f,              #Physical Maximum (32767)
-          0x09, 0x33,           #    Usage (RX)  
-          0x09, 0x34,           #    Usage (RY)  
-          0x09, 0x35,           #    Usage (RZ)  
-          0x75, 0x10,           #    Report Size (16)  
-          0x95, 0x03,           #    Report Count (3)  
-          0x81, 0x02,           #    Input (variable,absolute)  
-          0xC0,                           #  End Collection     
-          
-          0xa1, 0x00,            # Collection (Physical)
-          0x85, 0x03,         #  Report ID 
-          0x15, 0x00,           #   Logical Minimum (0)  
-          0x25, 0x01,           #    Logical Maximum (1) 
-          0x75, 0x01,           #    Report Size (1)  
-          0x95, 24,           #    Report Count (24) 
-          0x05, 0x09,           #    Usage Page (Button)  
-          0x19, 1,           #    Usage Minimum (Button #1)  
-          0x29, 24,           #    Usage Maximum (Button #24)  
-          0x81, 0x02,           #    Input (variable,absolute)  
-          0xC0,
-          0xC0,]
-
+if compatible:
+    descriptor = [
+              0x05, 0x01,           #  Usage Page (Generic Desktop)  
+              0x09, 0x04 if joystick else 0x08,           #  0x08: Usage (Multi-Axis)  
+              0xa1, 0x01,           #  Collection (Application)  
+              0xa1, 0x00,           # Collection (Physical)
+              0x85, 0x01,           #  Report ID 
+              0x16, minLow, minHigh,        #logical minimum (-500)
+              0x26, maxLow, maxHigh,        #logical maximum (500)
+              0x36, 0x00, 0x80,              # Physical Minimum (-32768)
+              0x46, 0xff, 0x7f,              #Physical Maximum (32767)
+              0x09, 0x30,           #    Usage (X)  
+              0x09, 0x31,           #    Usage (Y)  
+              0x09, 0x32,           #    Usage (Z)  
+              0x75, 0x10,           #    Report Size (16)  
+              0x95, 0x03,           #    Report Count (3)  
+              0x81, 0x02,           #    Input (variable,absolute)  
+              0xC0,                 #  End Collection  
+              0xa1, 0x00,            # Collection (Physical)
+              0x85, 0x02,         #  Report ID 
+              0x16, minLow, minHigh,        #logical minimum (-500)
+              0x26, maxLow, maxHigh,        #logical maximum (500)
+              0x36,0x00,0x80,              # Physical Minimum (-32768)
+              0x46,0xff,0x7f,              #Physical Maximum (32767)
+              0x09, 0x33,           #    Usage (RX)  
+              0x09, 0x34,           #    Usage (RY)  
+              0x09, 0x35,           #    Usage (RZ)  
+              0x75, 0x10,           #    Report Size (16)  
+              0x95, 0x03,           #    Report Count (3)  
+              0x81, 0x02,           #    Input (variable,absolute)  
+              0xC0,                           #  End Collection     
+              
+              0xa1, 0x00,            # Collection (Physical)
+              0x85, 0x03,         #  Report ID 
+              0x15, 0x00,           #   Logical Minimum (0)  
+              0x25, 0x01,           #    Logical Maximum (1) 
+              0x75, 0x01,           #    Report Size (1)  
+              0x95, 24,           #    Report Count (24) 
+              0x05, 0x09,           #    Usage Page (Button)  
+              0x19, 1,           #    Usage Minimum (Button #1)  
+              0x29, 24,           #    Usage Maximum (Button #24)  
+              0x81, 0x02,           #    Input (variable,absolute)  
+              0xC0,
+              0xC0,]
+else:
+    descriptor = [
+              0x05, 0x01,           #  Usage Page (Generic Desktop)  
+              0x09, 0x04 if joystick else 0x08,           #  0x08: Usage (Multi-Axis)  
+              0xa1, 0x01,           #  Collection (Application)  
+              0xa1, 0x00,           # Collection (Physical)
+              0x85, 0x01,           #  Report ID 
+              0x16, minLow, minHigh,        #logical minimum (-500)
+              0x26, maxLow, maxHigh,        #logical maximum (500)
+              0x36, 0x00, 0x80,              # Physical Minimum (-32768)
+              0x46, 0xff, 0x7f,              #Physical Maximum (32767)
+              0x09, 0x30,           #    Usage (X)  
+              0x09, 0x31,           #    Usage (Y)  
+              0x09, 0x32,           #    Usage (Z)  
+              0x09, 0x33,           #    Usage (RX)  
+              0x09, 0x34,           #    Usage (RY)  
+              0x09, 0x35,           #    Usage (RZ)  
+              0x75, 0x10,           #    Report Size (16)  
+              0x95, 0x06,           #    Report Count (6)  
+              0x81, 0x02,           #    Input (variable,absolute)  
+              0xC0,          
+              0xa1, 0x00,           # Collection (Physical)
+              0x85, 0x03,           #  Report ID 
+              0x15, 0x00,           #   Logical Minimum (0)  
+              0x25, 0x01,           #    Logical Maximum (1) 
+              0x75, 0x01,           #    Report Size (1)  
+              0x95, 24,           #    Report Count (24) 
+              0x05, 0x09,           #    Usage Page (Button)  
+              0x19, 1,           #    Usage Minimum (Button #1)  
+              0x29, 24,           #    Usage Maximum (Button #24)  
+              0x81, 0x02,           #    Input (variable,absolute)  
+              0xC0,
+              0xC0,]
 
 class HIDClass(BaseStucture):
     _fields_ = [
@@ -364,11 +401,15 @@ class USBHID(USBDevice):
         self.start_time = datetime.datetime.now()
         self.lastSend = -1
         self.seq = 0
+        if compatible:
+            self.handle_data = self.handle_data_compatible
+        else:
+            self.handle_data = self.handle_data_fast
 
     def generate_hid_report(self):
         return bytes(bytearray(descriptor))
 
-    def handle_data(self, usb_req):
+    def handle_data_compatible(self, usb_req):
         global newXYZ, newRXYZ, newButtons, event, lock
         event.wait(0.5)
         return_val = b''
@@ -384,6 +425,28 @@ class USBHID(USBDevice):
             return_val = struct.pack("<BHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]))
             newXYZ = False
             newRXYZ = True
+        if newXYZ or newRXYZ or newButtons:
+            event.set()
+        else:
+            event.clear()
+        lock.release()
+        self.send_usb_req(usb_req, return_val, status=(0 if return_val else 1))
+
+    def handle_data_fast(self, usb_req):
+        global newXYZ, newRXYZ, newButtons, event, lock
+        event.wait(0.5)
+        return_val = b''
+        lock.acquire()
+        if newXYZ or newRXYZ:
+            return_val = struct.pack("<BHHHHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]), trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
+            event.set()
+            newXYZ = False
+            newRXYZ = False
+            newButtons = True
+        elif newButtons:
+            return_val = struct.pack("<BBBB", 3, buttons&0xFF, buttons>>8, 0)
+            newButtons = False
+
         if newXYZ or newRXYZ or newButtons:
             event.set()
         else:
