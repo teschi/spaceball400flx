@@ -23,6 +23,9 @@ import signal
 
 COMMAND_TIMEOUT = 2
 TIMEOUT = 5
+outState = 0
+newXYZ = False
+newButtons = False
 axisMap = (0,1,2)
 noLaunch = False
 noAdmin = False
@@ -37,9 +40,6 @@ lock = threading.Lock()
 xyz = [0,0,0]
 rxyz = [0,0,0]
 buttons = 0
-newButtons = False
-newXYZ = False
-newRXYZ = False
 trimValue = 500
 forceVendorID = None
 forceProductID = None
@@ -410,47 +410,57 @@ class USBHID(USBDevice):
         return bytes(bytearray(descriptor))
 
     def handle_data_compatible(self, usb_req):
-        global newXYZ, newRXYZ, newButtons, event, lock
+        global newXYZ, newButtons, outState, event, lock
+        
         event.wait(0.5)
-        return_val = b''
+        
         lock.acquire()
-        if newRXYZ:
+        if outState == 0:
+            if newXYZ or newButtons:
+                return_val = struct.pack("<BHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]))           
+                newXYZ = False
+                outState += 1
+            else:
+                return_val = b''
+        elif outState == 1:
             return_val = struct.pack("<BHHH", 2, trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
-            newRXYZ = False
-            newButtons = True
-        elif newButtons:
-            return_val = struct.pack("BBBB", 3, buttons&0xFF, buttons>>8, 0)
+            outState += 1
+        else: 
             newButtons = False
-        elif newXYZ:
-            return_val = struct.pack("<BHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]))
-            newXYZ = False
-            newRXYZ = True
-        if newXYZ or newRXYZ or newButtons:
+            return_val = struct.pack("BBBB", 3, buttons&0xFF, buttons>>8, 0)
+            outState = 0
+
+        if newXYZ or newButtons or outState:
             event.set()
         else:
             event.clear()
+
         lock.release()
         self.send_usb_req(usb_req, return_val, status=(0 if return_val else 1))
 
     def handle_data_fast(self, usb_req):
-        global newXYZ, newRXYZ, newButtons, event, lock
+        global newXYZ, newButtons, outState, event, lock
+        
         event.wait(0.5)
-        return_val = b''
+
         lock.acquire()
-        if newXYZ or newRXYZ:
-            return_val = struct.pack("<BHHHHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]), trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
-            event.set()
-            newXYZ = False
-            newRXYZ = False
-            newButtons = True
-        elif newButtons:
+        if outState == 0:
+            if newXYZ or newButtons or True:
+                return_val = struct.pack("<BHHHHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]), trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
+                newXYZ = False
+                outState += 1
+            else:
+                return_val = b''
+        elif outState == 1:
             return_val = struct.pack("<BBBB", 3, buttons&0xFF, buttons>>8, 0)
             newButtons = False
+            outState = 0
 
-        if newXYZ or newRXYZ or newButtons:
+        if newXYZ or newButtons or outState:
             event.set()
         else:
             event.clear()
+
         lock.release()
         self.send_usb_req(usb_req, return_val, status=(0 if return_val else 1))
 
@@ -476,7 +486,7 @@ def get16(data,offset):
     return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
 
 def processData_4000(data):
-    global buttons,xyz,rxyz,newXYZ,newRXYZ,newButtons,lock,event
+    global buttons,xyz,rxyz,newXYZ,newButtons,lock,event
     if len(data) == 15 and data[0] == ord(b'D'):
         lock.acquire()
         xyz[0] = get16(data, 3)
