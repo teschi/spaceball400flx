@@ -28,8 +28,6 @@ problems, but installation will be more complicated.
     
 where COMx is your COM port. An admin window will pop up and create an emulated SpaceMouse Pro (in my original post I mistakenly said SpacePilot Pro) which should work with 3dxware. If you want to create a standard six-axis 12-button joystick instead, try:
 
-    3d -p COMx -j -m 700
-
-(The 700 controls the maximum deviation. Games won't work well without that.)
+    3d -p COMx -j
 
 8. To exit, close the window that runs the emulation.
