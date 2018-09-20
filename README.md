@@ -1,5 +1,5 @@
 This code uses the USB/IP project: http://usbip.sourceforge.net/ to pretend that an
-serial SpaceBall 4000 FLX is actually a USB-HID based SpacePilot Pro (for use with the
+serial SpaceBall 4000/5000 FLX is actually a USB based SpaceMouse Pro (for use with the
 official 3dxware drivers) or else that it is a standard six-axis joystick.
 
 You have two choices: You can use the official signed usbip release. If you do that, you run
