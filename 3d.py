@@ -153,17 +153,14 @@ def persistentRead():
         except Exception as e:
             print(str(e))
     return None
+    
+class FLXOrX003(SerialSpaceMouse):
+    def __init__(self,keyCommand=b'.',name="unknown"):
+        super(FLXOrX003, self).__init__(axisMap=(0,1,2), polarityXYZ=(1,1,-1), polarityRXYZ=(1,1,-1),haveEscape=True,name=name)
+        self.keyCommand = keyCommand
 
-class FLX(SerialSpaceMouse):
-    def __init__(self):
-        super(FLX, self).__init__(axisMap=(0,1,2), polarityXYZ=(1,1,-1), polarityRXYZ=(1,1,-1),haveEscape=True,name="SpaceBall 4000/5000FLX")
-        
     def init(self):
         conn.write(b'\r')
-        confirmWrite(b"P20")
-        confirmWrite(b"Y"+sensitivity)
-        confirmWrite(b"A271006", b"a271006E")
-        confirmWrite(b"M")
 
     def processData(self,data):
         global buttons,xyz,rxyz,newXYZ,newButtons,lock,event
@@ -178,7 +175,7 @@ class FLX(SerialSpaceMouse):
             newXYZ = True
             event.set()
             lock.release()
-        elif len(data) == 3 and data[0] == ord(b'.'):
+        elif self.keyCommand == b'.' and len(data) == 3 and data[0] == ord(b'.'):
             b = (data[2]&0xFF) | (data[1]&0xFF)<<8
             b = ((b&0b111111) | ((b&~0b1111111)>>1)) & 0b111111111111;
             lock.acquire()
@@ -186,7 +183,34 @@ class FLX(SerialSpaceMouse):
             newButtons = True
             event.set()
             lock.release()        
+        elif self.keyCommand != b'.' and len(data) == 3 and data[0] == ord(self.keyCommand):
+            b = data[1]&0xFF
+            lock.acquire()
+            buttons = b
+            newButtons = True
+            event.set()
+            lock.release()        
         
+class FLX(FLXOrX003):
+    def __init__(self):
+        super(FLX, self).__init__(keyCommand=b'.',name="SpaceBall 4000/5000FLX")
+        
+    def init(self):
+        super(FLX, self).init()
+        confirmWrite(b"P20")
+        confirmWrite(b"Y"+sensitivity)
+        confirmWrite(b"A271006", b"a271006E")
+        confirmWrite(b"M")
+        
+class X003(FLXOrX003):
+    def __init__(self):
+        super(X003, self).__init__(keyCommand=b'K',name="SpaceBall x003")
+        
+    def init(self):
+        super(X003, self).init()
+        conn.write(b'MSS\r')
+        # TODO        
+
 def serialLoop():
     global conn,running
     overflow = False
@@ -576,6 +600,8 @@ while i < len(opts):
         arg = arg.lower()
         if 'flx' in arg or '4000' in arg:
             currentMouse = FLX()
+        elif '003' in arg:
+            currentMouse = X003()
         else:
             raise Exception("unrecognized model")
     i += 1
