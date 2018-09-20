@@ -20,13 +20,17 @@ if os.name == 'nt':
     import windows_utils
     from ctypes.wintypes import BOOL
 import signal
+builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
+from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
 
 COMMAND_TIMEOUT = 2
 TIMEOUT = 5
 outState = 0
 newXYZ = False
 newButtons = False
-axisMap = (0,1,2)
+outAxisMap = (0,1,2)
+polarityXYZ = (1,1,-1)
+polarityRXYZ = (1,1,-1)
 noLaunch = False
 noAdmin = False
 sensitivity = b'S' # Standard/Cubic
@@ -47,110 +51,21 @@ compatible = False
 usbip = None if os.name == 'nt' else "usbip"
 event = threading.Event()
 
-builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
 
-opts, args = getopt.getopt(sys.argv[1:], "Ctonu:m:P:V:chljp:d:", ["compatibility-mode", "test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
-                    "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
-i = 0
-while i < len(opts):
-    opt,arg = opts[i]
-    if opt in ('-h', '--help'):
-        print("""python 3d.py [options]\n
--h --help                this information
--j --joystick            HID joystick mode 
--l --list-ports          list serial ports
--c --cubic               cubic sensitivity mode
--n --new-driver          new patched driver
--o --old-driver          old but signed driver
--c --compatibility-mode  slower compatibility mode
--t --test                send test data
--mMAX --max=MAX          set maximum value for all axes
--VVID --vendor=VID       force vendor ID (hex)
--PPID --product=PID      force product ID (hex)
--pCOMx | --port=COMx     COM port of SpaceBall 4000
--ddesc | --description=desc  description of COM port device starts with desc""")
-        sys.exit(0)
-    elif opt in ('-j', '--joystick'):
-        joystick = True
-        axisMap = (0,2,1)
-    elif opt in ('-p', '--port'):
-        port = arg
-        description = None
-    elif opt in ('-l', '--list-ports'):
-        for p in serial.tools.list_ports.comports():
-            print(p.device+": "+p.description)
-        sys.exit(0)
-    elif opt in ('-d', '--description'):
-        port = None
-        description = arg
-    elif opt in ('-c', '--cubic-mode'):
-        sensitivity = b'S'
-    elif opt in ('-V', '--vendor'):
-        forceVendorID = int(arg, 16)
-    elif opt in ('-P', '--product'):
-        forceProductID = int(arg, 16)        
-    elif opt in ('-m', '--max'):
-        trimValue = int(arg)
-    elif opt in ('-u', '--usbip-exe'):
-        if arg[-1] == '/' or arg[-1] == ':':
-            usbip = arg + "usbip"
-        elif arg[-1] == '':
-            usbip = "usbip"
-        else:
-            usbip = arg + "/" + "usbip"
-        if os.name == 'nt':
-            usbip += ".exe"
-    elif opt in ('--no-admin',):
-        noAdmin = True
-    elif opt in ('--no-launch',):
-        noLaunch = True
-    elif opt in ('-n', '--new-driver'):
-        builtins.USBIP_VERSION = 273
-    elif opt in ('-o', '--old-driver'):
-        builtins.USBIP_VERSION = 262
-    elif opt in ('-t', '--test'):
-        test = True
-    elif opt in ('-c', '--compatibility-mode'):
-        compatible = True
-    i += 1
 
-if not builtins.USBIP_VERSION:
-    if os.name == 'nt':
-        builtins.USBIP_VERSION = windows_utils.getVBUSVersion()
-    else:
-        builtins.USBIP_VERSION = 262
-
-def is_admin():
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-print("Assuming version",builtins.USBIP_VERSION)
-if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
-    import platform
-    if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
-        print("With the signed driver on Windows x64, please use a 64-bit Python interpreter.")
-        exit(1)
-    if not is_admin():
-        def u(z):
-            if sys.version_info[0] >= 3:
-                return z
-            else:
-                return unicode(z)
-        print("Relaunching as administrator.")
-        print("If you don't want to do that, you'll need the new unsigned driver.")
-        args = u(__file__)
-        if len(sys.argv) >= 2:
-            args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
-        ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
-        sys.exit(0)
+class SerialSpaceMouse(object):
+    def __init__(self,axisMap=(0,1,2),polarityXYZ=(1,1-1),polarityRXYZ=(1,1,-1),haveEscape=True,name="unknown"):
+        self.axisMap = axisMap
+        self.polarityXYZ = polarityXYZ
+        self.polarityRXYZ = polarityRXYZ
+        self.haveEscape = haveEscape
+        self.name = name
         
-#if os.name == 'nt' and builtins.USBIP_VERSION == 262:
-#    windows_utils.disableClose()
-#    
-from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
+    @staticmethod
+    def get16(data,offset):
+        return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
 
+        
 def trim(x):
     if trimValue == 0:
         return x
@@ -203,11 +118,8 @@ def persistentOpen():
             if conn is not None:
                 sleep(1)
                 conn.reset_input_buffer()
-                print("Initializing serial connection")
-                confirmWrite(b"P20")
-                confirmWrite(b"Y"+sensitivity)
-                confirmWrite(b"A271006", b"a271006E")
-                confirmWrite(b"M")
+                print("Initializing serial connection to "+currentMouse.name)
+                currentMouse.init()
                 return
             sleep(0.5)
         except serial.SerialException as e:
@@ -241,6 +153,119 @@ def persistentRead():
         except Exception as e:
             print(str(e))
     return None
+
+class FLX(SerialSpaceMouse):
+    def __init__(self):
+        super(FLX, self).__init__(axisMap=(0,1,2), polarityXYZ=(1,1,-1), polarityRXYZ=(1,1,-1),haveEscape=True,name="SpaceBall 4000/5000FLX")
+        
+    def init(self):
+        conn.write(b'\r')
+        confirmWrite(b"P20")
+        confirmWrite(b"Y"+sensitivity)
+        confirmWrite(b"A271006", b"a271006E")
+        confirmWrite(b"M")
+
+    def processData(self,data):
+        global buttons,xyz,rxyz,newXYZ,newButtons,lock,event
+        if len(data) == 15 and data[0] == ord(b'D'):
+            lock.acquire()
+            xyz[self.axisMap[0]] = self.polarityXYZ[0]*FLX.get16(data, 3)
+            xyz[self.axisMap[1]] = self.polarityXYZ[1]*FLX.get16(data, 5);
+            xyz[self.axisMap[2]] = self.polarityXYZ[2]*FLX.get16(data, 7)
+            rxyz[self.axisMap[0]] = self.polarityRXYZ[0]*FLX.get16(data, 9)
+            rxyz[self.axisMap[1]] = self.polarityRXYZ[1]*FLX.get16(data, 11)
+            rxyz[self.axisMap[2]] = self.polarityRXYZ[2]*FLX.get16(data, 13)
+            newXYZ = True
+            event.set()
+            lock.release()
+        elif len(data) == 3 and data[0] == ord(b'.'):
+            b = (data[2]&0xFF) | (data[1]&0xFF)<<8
+            b = ((b&0b111111) | ((b&~0b1111111)>>1)) & 0b111111111111;
+            lock.acquire()
+            buttons = ((b >> 9) | (b << 3)) & 0b111111111111
+            newButtons = True
+            event.set()
+            lock.release()        
+        
+def serialLoop():
+    global conn,running
+    overflow = False
+    buffer = bytearray()
+    escape = False
+    persistentOpen()
+    while running:
+        c = persistentRead()
+        if not running:
+            break
+        if c == b'\r':
+            if len(buffer):
+                currentMouse.processData(buffer)
+                buffer = bytearray()
+            continue         
+        if currentMouse.haveEscape:
+            if escape:
+                if c == b'Q' or c == b'S' or c == b'M':
+                    c = bytes(bytearray((ord(c)&0b10111111,)))
+                escape = False
+            elif c == b'^':
+                escape = True
+                continue
+        if len(buffer) < 256:
+            buffer += c
+            overflow = False
+        else:
+            overflow = True
+            
+def emulateLoop():
+    def emit(x,y,z,rx,ry,rz,buttonsToPress,t):
+        global xyz,rxyz,newXYZ,lock,event,newButtons,buttons
+        lock.acquire()
+        xyz = (x,y,z)
+        rxyz = (rx,ry,rz)
+        newXYZ = True
+        lock.release()
+        print(xyz,rxyz)
+        
+        if buttonsToPress:
+            lock.acquire()
+            buttons = buttonsToPress
+            newButtons = True
+            event.set()
+            lock.release()
+            sleep(0.5)
+            
+        t1 = time() + t
+        while time()<t1:
+            lock.acquire()
+            newXYZ = True
+            event.set()
+            lock.release()
+            sleep(0.1)
+            
+        if buttonsToPress:
+            lock.acquire()
+            buttons = 0
+            newButtons = True
+            event.set()
+            lock.release()
+            sleep(0.5)
+    
+    while running:
+        emit(50,0,0,200,0,0, 1<12, 3)                
+        emit(-50,0,0,-200,0,0, 0, 3)
+        emit(0,0,0,0,200,0, 1<12, 3)
+        emit(0,0,0,0,-200,0,0, 3)
+        emit(0,0,0,0,0,200,1<12,  3)
+        emit(0,0,0,0,0,-200,0, 3)
+        emit(0,0,100,0,0,0, 1<12, 3)
+        emit(0,0,-100,0,0,0, 0, 3)
+
+        
+currentMouse = FLX()
+
+#if os.name == 'nt' and builtins.USBIP_VERSION == 262:
+#    windows_utils.disableClose()
+#    
 
 
 # HID Configuration
@@ -417,13 +442,13 @@ class USBHID(USBDevice):
         lock.acquire()
         if outState == 0:
             if newXYZ or newButtons:
-                return_val = struct.pack("<BHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]))           
+                return_val = struct.pack("<BHHH", 1, trim(xyz[outAxisMap[0]]),trim(xyz[outAxisMap[1]]),trim(xyz[outAxisMap[2]]))           
                 newXYZ = False
                 outState += 1
             else:
                 return_val = b''
         elif outState == 1:
-            return_val = struct.pack("<BHHH", 2, trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
+            return_val = struct.pack("<BHHH", 2, trim(rxyz[outAxisMap[0]]),trim(rxyz[outAxisMap[1]]),trim(rxyz[outAxisMap[2]]))
             outState += 1
         else: 
             newButtons = False
@@ -446,7 +471,7 @@ class USBHID(USBDevice):
         lock.acquire()
         if outState == 0:
             if newXYZ or newButtons or True:
-                return_val = struct.pack("<BHHHHHH", 1, trim(xyz[axisMap[0]]),trim(xyz[axisMap[1]]),trim(xyz[axisMap[2]]), trim(rxyz[axisMap[0]]),trim(rxyz[axisMap[1]]),trim(rxyz[axisMap[2]]))
+                return_val = struct.pack("<BHHHHHH", 1, trim(xyz[outAxisMap[0]]),trim(xyz[outAxisMap[1]]),trim(xyz[outAxisMap[2]]), trim(rxyz[outAxisMap[0]]),trim(rxyz[outAxisMap[1]]),trim(rxyz[outAxisMap[2]]))
                 newXYZ = False
                 outState += 1
             else:
@@ -469,7 +494,7 @@ class USBHID(USBDevice):
         if control_req.bmRequestType == 0x81:
             if control_req.bRequest == 0x6:  # Get Descriptor
                 if control_req.wValue == 0x22:  # send initial report
-                    print('Sending USB HID report descriptor')
+                    print('Identifying emulated USB device to host')
                     self.send_usb_req(usb_req, self.generate_hid_report())
                     sentReport = True
 
@@ -482,103 +507,114 @@ usb_Dev = USBHID()
 usb_container = USBContainer()
 usb_container.add_usb_device(usb_Dev)  # Supports only one device!
           
-def get16(data,offset):
-    return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
-
-def processData_4000(data):
-    global buttons,xyz,rxyz,newXYZ,newButtons,lock,event
-    if len(data) == 15 and data[0] == ord(b'D'):
-        lock.acquire()
-        xyz[0] = get16(data, 3)
-        xyz[1] = get16(data, 5);
-        xyz[2] = -get16(data, 7)
-        rxyz[0] = get16(data, 9)
-        rxyz[1] = get16(data, 11)
-        rxyz[2] = -get16(data, 13)
-        newXYZ = True
-        event.set()
-        lock.release()
-    elif len(data) == 3 and data[0] == ord(b'.'):
-        b = (data[2]&0xFF) | (data[1]&0xFF)<<8
-        b = ((b&0b111111) | ((b&~0b1111111)>>1)) & 0b111111111111;
-        lock.acquire()
-        buttons = ((b >> 9) | (b << 3)) & 0b111111111111
-        newButtons = True
-        event.set()
-        lock.release()
-
-def serialLoop(processData=processData_4000):
-    global conn,running
-    overflow = False
-    buffer = bytearray()
-    escape = False
-    persistentOpen()
-    while running:
-        c = persistentRead()
-        if not running:
-            break
-        if c == b'\r':
-            if len(buffer):
-                processData(buffer)
-                buffer = bytearray()
-            continue                
-        if escape:
-            if c == b'Q' or c == b'S' or c == b'M':
-                c = bytes(bytearray((ord(c)&0b10111111,)))
-            escape = False
-        elif c == b'^':
-            escape = True
-            continue
-        if len(buffer) < 256:
-            buffer += c
-            overflow = False
-        else:
-            overflow = True
-            
-def emulateLoop():
-    def emit(x,y,z,rx,ry,rz,buttonsToPress,t):
-        global xyz,rxyz,newXYZ,lock,event,newButtons,buttons
-        lock.acquire()
-        xyz = (x,y,z)
-        rxyz = (rx,ry,rz)
-        newXYZ = True
-        lock.release()
-        print(xyz,rxyz)
         
-        if buttonsToPress:
-            lock.acquire()
-            buttons = buttonsToPress
-            newButtons = True
-            event.set()
-            lock.release()
-            sleep(0.5)
-            
-        t1 = time() + t
-        while time()<t1:
-            lock.acquire()
-            newXYZ = True
-            event.set()
-            lock.release()
-            sleep(0.1)
-            
-        if buttonsToPress:
-            lock.acquire()
-            buttons = 0
-            newButtons = True
-            event.set()
-            lock.release()
-            sleep(0.5)
-    
-    while running:
-        emit(50,0,0,200,0,0, 1<12, 3)                
-        emit(-50,0,0,-200,0,0, 0, 3)
-        emit(0,0,0,0,200,0, 1<12, 3)
-        emit(0,0,0,0,-200,0,0, 3)
-        emit(0,0,0,0,0,200,1<12,  3)
-        emit(0,0,0,0,0,-200,0, 3)
-        emit(0,0,100,0,0,0, 1<12, 3)
-        emit(0,0,-100,0,0,0, 0, 3)
+opts, args = getopt.getopt(sys.argv[1:], "M:Ctonu:m:P:V:chljp:d:", ["model=", "compatibility-mode", "test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
+                    "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
+i = 0
+while i < len(opts):
+    opt,arg = opts[i]
+    if opt in ('-h', '--help'):
+        print("""python 3d.py [options]\n
+-h --help                this information
+-j --joystick            HID joystick mode 
+-l --list-ports          list serial ports
+-c --cubic               cubic sensitivity mode
+-n --new-driver          new patched driver
+-o --old-driver          old but signed driver
+-c --compatibility-mode  slower compatibility mode
+-t --test                send test data
+-Mmodel -model=model     set model: flx (4000flx or 5000fx), x003 (2003 or 3003)
+-mMAX --max=MAX          set maximum value for all axes
+-VVID --vendor=VID       force vendor ID (hex)
+-PPID --product=PID      force product ID (hex)
+-pCOMx | --port=COMx     COM port of SpaceBall flx
+-ddesc | --description=desc  description of COM port device starts with desc""")
+        sys.exit(0)
+    elif opt in ('-j', '--joystick'):
+        joystick = True
+        outAxisMap = (0,2,1)
+    elif opt in ('-p', '--port'):
+        port = arg
+        description = None
+    elif opt in ('-l', '--list-ports'):
+        for p in serial.tools.list_ports.comports():
+            print(p.device+": "+p.description)
+        sys.exit(0)
+    elif opt in ('-d', '--description'):
+        port = None
+        description = arg
+    elif opt in ('-c', '--cubic-mode'):
+        sensitivity = b'S'
+    elif opt in ('-V', '--vendor'):
+        forceVendorID = int(arg, 16)
+    elif opt in ('-P', '--product'):
+        forceProductID = int(arg, 16)        
+    elif opt in ('-m', '--max'):
+        trimValue = int(arg)
+    elif opt in ('-u', '--usbip-exe'):
+        if arg[-1] == '/' or arg[-1] == ':':
+            usbip = arg + "usbip"
+        elif arg[-1] == '':
+            usbip = "usbip"
+        else:
+            usbip = arg + "/" + "usbip"
+        if os.name == 'nt':
+            usbip += ".exe"
+    elif opt in ('--no-admin',):
+        noAdmin = True
+    elif opt in ('--no-launch',):
+        noLaunch = True
+    elif opt in ('-n', '--new-driver'):
+        builtins.USBIP_VERSION = 273
+    elif opt in ('-o', '--old-driver'):
+        builtins.USBIP_VERSION = 262
+    elif opt in ('-t', '--test'):
+        test = True
+    elif opt in ('-c', '--compatibility-mode'):
+        compatible = True
+    elif opt in ('-M', '--model'):
+        arg = arg.lower()
+        if 'flx' in arg or '4000' in arg:
+            currentMouse = FLX()
+        else:
+            raise Exception("unrecognized model")
+    i += 1
 
+if not builtins.USBIP_VERSION:
+    if os.name == 'nt':
+        builtins.USBIP_VERSION = windows_utils.getVBUSVersion()
+    else:
+        builtins.USBIP_VERSION = 262
+
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+print("Assuming version",builtins.USBIP_VERSION)
+if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
+    import platform
+    if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
+        print("With the signed driver on Windows x64, please use a 64-bit Python interpreter.")
+        exit(1)
+    if not is_admin():
+        def u(z):
+            if sys.version_info[0] >= 3:
+                return z
+            else:
+                return unicode(z)
+        print("Relaunching as administrator.")
+        print("If you don't want to do that, you'll need the new unsigned driver.")
+        args = u(__file__)
+        if len(sys.argv) >= 2:
+            args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
+        ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
+        sys.exit(0)
+        
+
+        
+        
 t1 = threading.Thread(target=emulateLoop if test else serialLoop)
 t1.daemon = True
 t1.start()
