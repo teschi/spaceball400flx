@@ -78,23 +78,23 @@ def trim(x):
             return trimValue
     return x        
     
-def haveResponse(r):
+def haveResponse(r, startsWith=False):
     t0 = time()
     while time() < t0+COMMAND_TIMEOUT:
         conn.timeout = COMMAND_TIMEOUT
         line = conn.read_until(b'\r', len(r)+1)
         conn.timeout = TIMEOUT
-        if line == r + b'\r':
+        if ( startsWith and line.startsWith(r) ) or line == r + b'\r':
             return True
     return False
             
-def confirmWrite(out, confirmation=None):
+def confirmWrite(out, confirmation=None, startsWith=False):
     if confirmation is None:
         confirmation = out
     for i in range(3):
         conn.reset_input_buffer()
         conn.write(out+b'\r')
-        if haveResponse(confirmation):
+        if haveResponse(confirmation, startsWith=startsWidth):
             print("Confirmed command "+out.decode())
             return
     raise serial.SerialException("Cannot confirm "+out.decode())
@@ -208,8 +208,10 @@ class X003(FLXOrX003):
         
     def init(self):
         super(X003, self).init()
+        confirmWrite(b"hv", b"hvV", startsWith=True)
+        conn.write(b'FB' + (b'@' if sensitivity==b'S' else b'p') + '\r')
         conn.write(b'MSS\r')
-        # TODO        
+        conn.write(b'CB\x01\r')
 
 def serialLoop():
     global conn,running
@@ -568,7 +570,7 @@ while i < len(opts):
         port = None
         description = arg
     elif opt in ('-c', '--cubic-mode'):
-        sensitivity = b'S'
+        sensitivity = b'C'
     elif opt in ('-V', '--vendor'):
         forceVendorID = int(arg, 16)
     elif opt in ('-P', '--product'):
