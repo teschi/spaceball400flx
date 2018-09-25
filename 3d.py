@@ -208,7 +208,7 @@ class X003(FLXOrX003):
         
     def init(self):
         super(X003, self).init()
-        confirmWrite(b"hv", b"hvV", startsWith=True)
+        confirmWrite(b"hv", b"Hv", startsWith=True)
         conn.write(b'FB' + (b'@' if sensitivity==b'S' else b'p') + '\r')
         conn.write(b'MSS\r')
         conn.write(b'CB\x01\r')
