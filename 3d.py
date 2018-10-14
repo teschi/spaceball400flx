@@ -547,7 +547,7 @@ while i < len(opts):
 -c --cubic               cubic sensitivity mode
 -n --new-driver          new patched driver
 -o --old-driver          old but signed driver
--c --compatibility-mode  slower compatibility mode
+-C --compatibility-mode  slower compatibility mode
 -t --test                send test data
 -Mmodel -model=model     set model: flx (4000flx or 5000fx), x003 (2003 or 3003)
 -mMAX --max=MAX          set maximum value for all axes
