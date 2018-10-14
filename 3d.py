@@ -94,7 +94,7 @@ def confirmWrite(out, confirmation=None, startsWith=False):
     for i in range(3):
         conn.reset_input_buffer()
         conn.write(out+b'\r')
-        if haveResponse(confirmation, startsWith=startsWidth):
+        if haveResponse(confirmation, startsWith=startsWith):
             print("Confirmed command "+out.decode())
             return
     raise serial.SerialException("Cannot confirm "+out.decode())
@@ -596,7 +596,7 @@ while i < len(opts):
         builtins.USBIP_VERSION = 262
     elif opt in ('-t', '--test'):
         test = True
-    elif opt in ('-c', '--compatibility-mode'):
+    elif opt in ('-C', '--compatibility-mode'):
         compatible = True
     elif opt in ('-M', '--model'):
         arg = arg.lower()
