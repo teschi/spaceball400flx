@@ -28,9 +28,9 @@ TIMEOUT = 5
 outState = 0
 newXYZ = False
 newButtons = False
-outAxisMap = (0,1,2)
-polarityXYZ = (1,1,-1)
-polarityRXYZ = (1,1,-1)
+outAxisMap = (0,2,1)
+polarityXYZ = (1,-1,-1)
+polarityRXYZ = (1,-1,-1)
 noLaunch = False
 noAdmin = False
 sensitivity = b'S' # Standard/Cubic
@@ -156,7 +156,7 @@ def persistentRead():
     
 class FLXOrX003(SerialSpaceMouse):
     def __init__(self,keyCommand=b'.',name="unknown"):
-        super(FLXOrX003, self).__init__(axisMap=(0,1,2), polarityXYZ=(1,1,-1), polarityRXYZ=(1,1,-1),haveEscape=True,name=name)
+        super(FLXOrX003, self).__init__(axisMap=(0,2,1), polarityXYZ=(1,-1,-1), polarityRXYZ=(1,-1,-1),haveEscape=True,name=name)
         self.keyCommand = keyCommand
 
     def init(self):
@@ -167,7 +167,7 @@ class FLXOrX003(SerialSpaceMouse):
         if len(data) == 15 and data[0] == ord(b'D'):
             lock.acquire()
             xyz[self.axisMap[0]] = self.polarityXYZ[0]*FLX.get16(data, 3)
-            xyz[self.axisMap[1]] = self.polarityXYZ[1]*FLX.get16(data, 5);
+            xyz[self.axisMap[1]] = self.polarityXYZ[1]*FLX.get16(data, 5)
             xyz[self.axisMap[2]] = self.polarityXYZ[2]*FLX.get16(data, 7)
             rxyz[self.axisMap[0]] = self.polarityRXYZ[0]*FLX.get16(data, 9)
             rxyz[self.axisMap[1]] = self.polarityRXYZ[1]*FLX.get16(data, 11)
