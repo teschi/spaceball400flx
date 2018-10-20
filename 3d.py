@@ -345,10 +345,10 @@ if compatible:
               0x15, 0x00,           #   Logical Minimum (0)  
               0x25, 0x01,           #    Logical Maximum (1) 
               0x75, 0x01,           #    Report Size (1)  
-              0x95, 24,           #    Report Count (24) 
+              0x95, 32,           #    Report Count (24) 
               0x05, 0x09,           #    Usage Page (Button)  
               0x19, 1,           #    Usage Minimum (Button #1)  
-              0x29, 24,           #    Usage Maximum (Button #24)  
+              0x29, 32,           #    Usage Maximum (Button #24)  
               0x81, 0x02,           #    Input (variable,absolute)  
               0xC0,
               0xC0,]
@@ -378,10 +378,10 @@ else:
               0x15, 0x00,           #   Logical Minimum (0)  
               0x25, 0x01,           #    Logical Maximum (1) 
               0x75, 0x01,           #    Report Size (1)  
-              0x95, 24,           #    Report Count (24) 
+              0x95, 32,           #    Report Count (24) 
               0x05, 0x09,           #    Usage Page (Button)  
               0x19, 1,           #    Usage Minimum (Button #1)  
-              0x29, 24,           #    Usage Maximum (Button #24)  
+              0x29, 32,           #    Usage Maximum (Button #24)  
               0x81, 0x02,           #    Input (variable,absolute)  
               0xC0,
               0xC0,]
@@ -478,7 +478,7 @@ class USBHID(USBDevice):
             outState += 1
         else: 
             newButtons = False
-            return_val = struct.pack("BBBB", 3, buttons&0xFF, buttons>>8, 0)
+            return_val = struct.pack("BBBBB", 3, buttons&0xFF, buttons>>8, 0, 0)
             outState = 0
 
         if newXYZ or newButtons or outState:
@@ -503,7 +503,7 @@ class USBHID(USBDevice):
             else:
                 return_val = b''
         elif outState == 1:
-            return_val = struct.pack("<BBBB", 3, buttons&0xFF, buttons>>8, 0)
+            return_val = struct.pack("<BBBBB", 3, buttons&0xFF, buttons>>8, 0, 0)
             newButtons = False
             outState = 0
 
