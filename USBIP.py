@@ -15,7 +15,7 @@ if os.name == 'nt':
     import msvcrt
     import windows_utils
     
-USBIP_VERSION = builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
+#USBIP_VERSION = builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
 
 class CommunicationChannel(object):
     def __init__(self, filename=None, ip=None, port=None, endianForWriting='>'):
@@ -129,7 +129,7 @@ def int_to_hex_string(val):
 
 class USBIPHeader(BaseStucture):
     _fields_ = [
-        ('version', 'H', USBIP_VERSION),
+        ('version', 'H', builtins.USBIP_VERSION),
         ('command', 'H'),
         ('status', 'I')
     ]
@@ -354,7 +354,7 @@ class USBDevice(object):
         else:
             if os.name=='nt':
                 self.detaching = True
-                if USBIP_VERSION == 262:
+                if builtins.USBIP_VERSION == 262:
                     print("Uninstalling")
                     if windows_utils.uninstallUSB(self.vendorID, self.productID, "on USB/IP Enumerator"):
                         print("Success uninstalling device")
