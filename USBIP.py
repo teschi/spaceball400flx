@@ -15,7 +15,7 @@ if os.name == 'nt':
     import msvcrt
     import windows_utils
     
-#USBIP_VERSION = builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
+USBIP_VERSION = 273 # builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
 
 class CommunicationChannel(object):
     def __init__(self, filename=None, ip=None, port=None, endianForWriting='>'):
@@ -106,7 +106,11 @@ class BaseStucture(object):
         return struct.pack(self.format(endian=endian), *values)
 
     def unpack(self, buf):
-        values = struct.unpack(self.format(), buf)
+        f = self.format()
+        desiredSize = struct.calcsize(f)
+        if desiredSize > len(buf):
+            buf = buf + (desiredSize - len(buf)) * b'\0'
+        values = struct.unpack(f, buf)
         i=0
         keys_vals = {}
         for val in values:
@@ -129,7 +133,7 @@ def int_to_hex_string(val):
 
 class USBIPHeader(BaseStucture):
     _fields_ = [
-        ('version', 'H', builtins.USBIP_VERSION),
+        ('version', 'H', USBIP_VERSION),
         ('command', 'H'),
         ('status', 'I')
     ]
@@ -342,6 +346,7 @@ class USBDevice(object):
             int0_class = self.configurations[0].interfaces[0].bInterfaceClass,
             int0_subclass = self.configurations[0].interfaces[0].bInterfaceSubClass,
             int0_protocol = self.configurations[0].interfaces[0].bInterfaceProtocol)
+        print("trying to attach")
         self.port = windows_utils.vbusAttach(msvcrt.get_osfhandle(self.channel.file.fileno()), plugin)
         self.attached = True
         print("Attached to vbus port "+str(self.port))
@@ -351,23 +356,6 @@ class USBDevice(object):
             return
         if not self.channel.file:
             self.channel.close()
-        else:
-            if os.name=='nt':
-                self.detaching = True
-                if builtins.USBIP_VERSION == 262:
-                    print("Uninstalling")
-                    if windows_utils.uninstallUSB(self.vendorID, self.productID, "on USB/IP Enumerator"):
-                        print("Success uninstalling device")
-                        sleep(2)
-                    else:
-                        print("Failure uninstalling device")
-                        print("In a minute you will probably get a BSOD unless you reboot or delete the device manually.")
-                        sleep(60)
-                print("Detaching device")
-                windows_utils.vbusDetach(msvcrt.get_osfhandle(self.channel.file.fileno()), self.port)
-                sleep(1)
-                self.channel.close()
-                self.detaching = False
         self.attached = False
 
     def generate_raw_configuration(self):
@@ -431,6 +419,9 @@ class USBDevice(object):
 class USBContainer(object):
     usb_devices = []
     running = True
+    
+    def __init__(self,windows_direct=False):
+        self.windows_direct = windows_direct
 
     def add_usb_device(self, usb_device):
         self.usb_devices.append(usb_device)
@@ -477,9 +468,8 @@ class USBContainer(object):
     def detach(self):
         self.usb_devices[0].detach()
 
-    def run(self, ip='0.0.0.0', port=3240, forceIP=False):
-        self.ipMode = forceIP or not os.name == 'nt'
-        if not self.ipMode:
+    def run(self, ip='0.0.0.0', port=3240):
+        if self.windows_direct:
             self.channel = CommunicationChannel(filename=windows_utils.getVBUSNodeName(),endianForWriting='<') 
         else:
             self.channel = CommunicationChannel(ip=ip, port=port,endianForWriting='>')
@@ -500,9 +490,10 @@ class USBContainer(object):
                         print('list of devices')
                         self.channel.write(self.handle_device_list().pack())
                     elif req.command == 0x8003:
-                        print('attach device')
                         self.channel.read(32)  # receive bus id
-                        self.channel.write(self.handle_attach().pack())
+                        h = self.handle_attach()
+                        print('attach device',h)
+                        self.channel.write(h.pack())
                         self.usb_devices[0].attached = True
                 else:
                     cmd = USBIPCMDSubmit()

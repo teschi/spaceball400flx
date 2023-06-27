@@ -414,6 +414,7 @@ def vbusGetFreePort(vbus):
     
 def vbusAttach(vbus, plugin):
     plugin.addr = vbusGetFreePort(vbus)
+    print("address",plugin.addr)
     unused = ULONG(0)
     if DeviceIoControl(vbus, IOCTL_USBVBUS_PLUGIN_HARDWARE, ctypes.byref(plugin), ctypes.sizeof(plugin), None, 0, ctypes.byref(unused), None):
         return plugin.addr

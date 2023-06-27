@@ -11,7 +11,7 @@ from time import sleep,time
 import sys
 import threading
 import getopt
-import serial
+import serial # python -m pip install pyserial
 import serial.tools.list_ports
 import subprocess
 import ctypes, sys, os
@@ -48,7 +48,7 @@ trimValue = 500
 forceVendorID = None
 forceProductID = None
 compatible = False
-usbip = None if os.name == 'nt' else "usbip"
+usbip = "usbip.exe" if os.name == 'nt' else "usbip"
 event = threading.Event()
 
 
@@ -684,13 +684,14 @@ if os.name=='nt':
 
 if usbip and not noLaunch:
     print("Starting "+usbip)
+    args = [usbip, "attach", "--remote", "localhost", "--busid", "1-1"]
     if os.name=='nt':
-        subprocess.Popen([usbip, "-a", "localhost", "1-1"],creationflags=0x00000200)
+        subprocess.Popen(args,creationflags=0x00000200)
     else:
-        subprocess.Popen([usbip, "-a", "localhost", "1-1"])
+        subprocess.Popen(args)
     print("Press ctrl-c to exit")
 
-usb_container.run(forceIP=usbip is not None)
+usb_container.run()
 
 if os.name=='nt':
     windowsExit()
