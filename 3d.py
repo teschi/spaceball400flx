@@ -684,6 +684,8 @@ if os.name=='nt':
 
 if usbip and not noLaunch:
     print("Starting "+usbip)
+    if os.name=='nt':
+        os.system("usbip install")
     args = [usbip, "--debug", "attach", "--remote", "localhost", "--busid", "1-1"]
     if os.name=='nt':
         subprocess.Popen(args,creationflags=0x00000200)
