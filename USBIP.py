@@ -107,9 +107,6 @@ class BaseStucture(object):
 
     def unpack(self, buf):
         f = self.format()
-        desiredSize = struct.calcsize(f)
-        if desiredSize > len(buf):
-            buf = buf + (desiredSize - len(buf)) * b'\0'
         values = struct.unpack(f, buf)
         i=0
         keys_vals = {}
@@ -122,13 +119,12 @@ class BaseStucture(object):
         self.init_from_dict(**keys_vals)
 
 
-def int_to_hex_string(val):
-    if val == 0:
-        return b'\0'
+def int_to_hex_string(val,count=8):
     out = bytearray()
-    while val:
+    while count:
         out.append(val & 0xFF)
         val >>= 8
+        count -= 1
     return bytes(out[::-1])
 
 class USBIPHeader(BaseStucture):
@@ -401,7 +397,7 @@ class USBDevice(object):
 
     def handle_usb_control(self, usb_req):
         control_req = StandardDeviceRequest()
-        control_req.unpack(int_to_hex_string(usb_req.setup))
+        control_req.unpack(int_to_hex_string(usb_req.setup,8))
         handled = False
         if control_req.bmRequestType == 0x80: # Host Request
             if control_req.bRequest == 0x6: # Get Descriptor
@@ -492,7 +488,7 @@ class USBContainer(object):
                     elif req.command == 0x8003:
                         self.channel.read(32)  # receive bus id
                         h = self.handle_attach()
-                        print('attach device',h)
+                        print('attach device')
                         self.channel.write(h.pack())
                         self.usb_devices[0].attached = True
                 else:
