@@ -1,9 +1,4 @@
 from __future__ import print_function
-try:
-    import builtins
-except:
-    import __builtin__
-    builtins = __builtin__
 import atexit
 import datetime
 import struct
@@ -20,7 +15,6 @@ if os.name == 'nt':
     import windows_utils
     from ctypes.wintypes import BOOL
 import signal
-builtins.USBIP_VERSION = None # 273 for the unsigned patched driver and 262 for the old signed driver
 from USBIP import BaseStucture, USBDevice, InterfaceDescriptor, DeviceConfigurations, EndPoint, USBContainer, USBRequest
 
 COMMAND_TIMEOUT = 2
@@ -31,6 +25,7 @@ newButtons = False
 outAxisMap = (0,1,2)
 polarityXYZ = (1,-1,-1)
 polarityRXYZ = (1,-1,-1)
+dominationRatio = 0
 noLaunch = False
 noAdmin = False
 sensitivity = b'S' # Standard/Cubic
@@ -172,6 +167,15 @@ class FLXOrX003(SerialSpaceMouse):
             rxyz[self.axisMap[0]] = self.polarityRXYZ[0]*FLX.get16(data, 9)
             rxyz[self.axisMap[1]] = self.polarityRXYZ[1]*FLX.get16(data, 11)
             rxyz[self.axisMap[2]] = self.polarityRXYZ[2]*FLX.get16(data, 13)
+            if dominationRatio != 0:
+                if (xyz[0]*xyz[0]+xyz[1]*xyz[1]+xyz[2]*xyz[2]) >= dominationRatio*dominationRatio*(rxyz[0]*rxyz[0]+rxyz[1]*rxyz[1]+rxyz[2]*rxyz[2]):
+                    rxyz[0] = 0
+                    rxyz[1] = 0
+                    rxyz[2] = 0
+                else:
+                    xyz[0] = 0
+                    xyz[1] = 0
+                    xyz[2] = 0
             newXYZ = True
             event.set()
             lock.release()
@@ -288,11 +292,6 @@ def emulateLoop():
 
         
 currentMouse = FLX()
-
-#if os.name == 'nt' and builtins.USBIP_VERSION == 262:
-#    windows_utils.disableClose()
-#    
-
 
 # HID Configuration
 
@@ -534,27 +533,26 @@ usb_container = USBContainer()
 usb_container.add_usb_device(usb_Dev)  # Supports only one device!
           
         
-opts, args = getopt.getopt(sys.argv[1:], "M:Ctonu:m:P:V:chljp:d:", ["model=", "compatibility-mode", "test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
-                    "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description="])
+opts, args = getopt.getopt(sys.argv[1:], "D:M:Ctonu:m:P:V:chljp:d:", ["model=", "compatibility-mode", "test", "no-admin", "old-driver", "new-driver", "no-launch", "usbip-directory=", "max", 
+                    "product", "vendor", "cubic-mode", "list-ports","help","joystick","port=","description=","domination="])
 i = 0
 while i < len(opts):
     opt,arg = opts[i]
     if opt in ('-h', '--help'):
         print("""python 3d.py [options]\n
--h --help                this information
--j --joystick            HID joystick mode 
--l --list-ports          list serial ports
--c --cubic               cubic sensitivity mode
--n --new-driver          new patched driver
--o --old-driver          old but signed driver
--C --compatibility-mode  slower compatibility mode
--t --test                send test data
--Mmodel -model=model     set model: flx (4000flx or 5000fx), x003 (2003 or 3003)
--mMAX --max=MAX          set maximum value for all axes
--VVID --vendor=VID       force vendor ID (hex)
--PPID --product=PID      force product ID (hex)
--pCOMx | --port=COMx     COM port of SpaceBall flx
--ddesc | --description=desc  description of COM port device starts with desc""")
+-h --help                  this information
+-j --joystick              HID joystick mode 
+-l --list-ports            list serial ports
+-c --cubic                 cubic sensitivity mode
+-C --compatibility-mode    slower compatibility mode
+-t --test                  send test data
+-Mmodel -model=model       set model: flx (4000flx or 5000fx), x003 (2003 or 3003)
+-mMAX --max=MAX            set maximum value for all axes
+-Dratio --domination=ratio only translation or rotation depending on translation to rotation ratio
+-VVID --vendor=VID         force vendor ID (hex)
+-PPID --product=PID        force product ID (hex)
+-pCOMx --port=COMx    COM  SpaceBall port
+-ddesc --description=desc  description of COM port device starts with desc""")
         sys.exit(0)
     elif opt in ('-j', '--joystick'):
         joystick = True
@@ -590,12 +588,10 @@ while i < len(opts):
         noAdmin = True
     elif opt in ('--no-launch',):
         noLaunch = True
-    elif opt in ('-n', '--new-driver'):
-        builtins.USBIP_VERSION = 273
-    elif opt in ('-o', '--old-driver'):
-        builtins.USBIP_VERSION = 262
     elif opt in ('-t', '--test'):
         test = True
+    elif opt in ('-D', '--dominance'):
+        dominationRatio = float(arg)
     elif opt in ('-C', '--compatibility-mode'):
         compatible = True
     elif opt in ('-M', '--model'):
@@ -608,24 +604,14 @@ while i < len(opts):
             raise Exception("unrecognized model")
     i += 1
 
-if not builtins.USBIP_VERSION:
-    if os.name == 'nt':
-        builtins.USBIP_VERSION = windows_utils.getVBUSVersion()
-    else:
-        builtins.USBIP_VERSION = 262
-
 def is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
     except:
         return False
 
-print("Assuming version",builtins.USBIP_VERSION)
-if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
+if os.name == 'nt' and not noAdmin:
     import platform
-    if platform.architecture()[0] != '64bit' and platform.machine().endswith('64'):
-        print("With the signed driver on Windows x64, please use a 64-bit Python interpreter.")
-        exit(1)
     if not is_admin():
         def u(z):
             if sys.version_info[0] >= 3:
@@ -639,9 +625,6 @@ if os.name == 'nt' and builtins.USBIP_VERSION == 262 and not noAdmin:
             args += " " + " ".join((u('"' + arg + '"') for arg in sys.argv[1:]))
         ctypes.windll.shell32.ShellExecuteW(None, u("runas"), u(sys.executable), args, None, 1)
         sys.exit(0)
-        
-
-        
         
 t1 = threading.Thread(target=emulateLoop if test else serialLoop)
 t1.daemon = True
@@ -662,7 +645,7 @@ def windowsExit():
             while time() < t + 15 and not sentReport:
                 sleep(1)
             if sentReport:
-                print("Ready to uninstall")
+                print("Ready to exit")
             sleep(1)
             if not sentReport:
                 print("Report still not sent. There may be some difficulties in disconnecting.")

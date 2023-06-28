@@ -4,18 +4,10 @@ import sys
 import struct
 import types
 from time import sleep
-try:
-    import builtins
-except:
-    import __builtin__
-    builtins = __builtin__
 import os
 import time
-if os.name == 'nt':
-    import msvcrt
-    import windows_utils
     
-USBIP_VERSION = 273 # builtins.USBIP_VERSION # 273 for the unsigned patched driver and 262 for the old signed driver
+USBIP_VERSION = 273
 
 class CommunicationChannel(object):
     def __init__(self, filename=None, ip=None, port=None, endianForWriting='>'):
@@ -328,24 +320,7 @@ class USBDevice(object):
         self.detaching = False
         
     def attach(self):
-        if self.attached or not self.channel.file:
-            return
-        speed = 2
-        busnum=1
-        devnum=2
-        plugin = windows_utils.ioctl_usbvbus_plugin(devid=(busnum << 16) | devnum,
-            vendor = self.vendorID,
-            product = self.productID,
-            version = self.bcdDevice,
-            speed = speed,
-            inum = self.bNumInterfaces,
-            int0_class = self.configurations[0].interfaces[0].bInterfaceClass,
-            int0_subclass = self.configurations[0].interfaces[0].bInterfaceSubClass,
-            int0_protocol = self.configurations[0].interfaces[0].bInterfaceProtocol)
-        print("trying to attach")
-        self.port = windows_utils.vbusAttach(msvcrt.get_osfhandle(self.channel.file.fileno()), plugin)
-        self.attached = True
-        print("Attached to vbus port "+str(self.port))
+        return
         
     def detach(self):
         if not self.attached:
@@ -416,9 +391,6 @@ class USBContainer(object):
     usb_devices = []
     running = True
     
-    def __init__(self,windows_direct=False):
-        self.windows_direct = windows_direct
-
     def add_usb_device(self, usb_device):
         self.usb_devices.append(usb_device)
 
@@ -465,10 +437,7 @@ class USBContainer(object):
         self.usb_devices[0].detach()
 
     def run(self, ip='0.0.0.0', port=3240):
-        if self.windows_direct:
-            self.channel = CommunicationChannel(filename=windows_utils.getVBUSNodeName(),endianForWriting='<') 
-        else:
-            self.channel = CommunicationChannel(ip=ip, port=port,endianForWriting='>')
+        self.channel = CommunicationChannel(ip=ip, port=port,endianForWriting='>')
         self.usb_devices[0].channel = self.channel
         self.usb_devices[0].attach()
         while self.running:
