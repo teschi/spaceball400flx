@@ -5,6 +5,8 @@ import getopt
 import serial # python -m pip install pyserial
 import serial.tools.list_ports
 
+import mouse
+
 COMMAND_TIMEOUT = 2
 TIMEOUT = 5
 newXYZ = False
@@ -38,7 +40,10 @@ class SerialSpaceMouse(object):
         
     @staticmethod
     def get16(data,offset):
-        return (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
+        val = (data[offset+1]&0xFF) | ((data[offset]&0xFF)<<8)
+        if (val & 0x8000 == 0x8000):
+            val = val-0x10000
+        return val
 
         
 def trim(x):
@@ -131,7 +136,7 @@ def persistentRead():
     
 class FLXOrX003(SerialSpaceMouse):
     def __init__(self,keyCommand=b'.',name="unknown"):
-        super(FLXOrX003, self).__init__(axisMap=(0,2,1), polarityXYZ=(1,-1,-1), polarityRXYZ=(1,-1,-1),haveEscape=True,name=name)
+        super(FLXOrX003, self).__init__(axisMap=(0,2,1), polarityXYZ=(1,1,1), polarityRXYZ=(1,1,1),haveEscape=True,name=name)
         self.keyCommand = keyCommand
 
     def init(self):
@@ -157,7 +162,7 @@ class FLXOrX003(SerialSpaceMouse):
                     xyz[1] = 0
                     xyz[2] = 0
             newXYZ = True
-            print("xyz", xyz, rxyz)
+#            print("xyz", xyz, rxyz)
             event.set()
             lock.release()
         elif self.keyCommand == b'.' and len(data) == 3 and data[0] == ord(b'.'):
@@ -188,6 +193,8 @@ class FLX(FLXOrX003):
         confirmWrite(b"Y"+sensitivity)
         confirmWrite(b"A271006", b"a271006E")
         confirmWrite(b"M")
+        conn.write(b'BcC\r')
+        # confirmWrite(b"BcC")
         
 
 def serialLoop():
@@ -272,6 +279,28 @@ stopped = False
 
 print("Press ctrl-c to exit")
 
-t1.join()
-    
+x=0
+y=0
+subPxX=0.0 
+subPxY=0.0
+delay = 0.01
+divideX = 50
+divideY = divideX
+
+while True: 
+  sleep(delay)
+  lock.acquire()
+  x=xyz[0]
+  y=-xyz[1]
+  
+  # print (">>>", x, y)
+  
+  # move mouse around, but keep track of sub-pixels to be able to have slow movements
+  subPxX += x/divideX
+  subPxY += y/divideY  
+  mouse.move(int(subPxX), int(subPxY), absolute=False )
+  subPxX -= int(subPxX)
+  subPxY -= int(subPxY)
+  
+  lock.release()
 
