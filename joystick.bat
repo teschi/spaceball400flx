@@ -1,1 +1,0 @@
-python 3d.py -j -m700
